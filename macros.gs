@@ -259,22 +259,28 @@ function processarMultiplasOCs(ocs) {
     }
 
     // Gera relatório para as OCs
-    const html = gerarRelatorioMultiplasOCs(ocs, dadosCache);
+    const resultado = gerarRelatorioMultiplasOCs(ocs, dadosCache);
 
-    if (!html) {
+    if (!resultado || !resultado.html) {
       return { success: false, message: 'Nenhum item encontrado para as OCs fornecidas' };
     }
 
     // Mostra o relatório
-    const output = HtmlService.createHtmlOutput(html)
+    const output = HtmlService.createHtmlOutput(resultado.html)
       .setWidth(1200)
       .setHeight(700);
 
     SpreadsheetApp.getUi().showModalDialog(output, 'Relatório de Produção');
 
-    const msg = ocs.length === 1
-      ? 'Relatório gerado com sucesso!'
-      : `Relatórios gerados para ${ocs.length} OC(s)!`;
+    // Monta mensagem com informações sobre OCs encontradas e não encontradas
+    let msg = '';
+    if (resultado.ocsEncontradas.length === 1 && resultado.ocsNaoEncontradas.length === 0) {
+      msg = 'Relatório gerado com sucesso!';
+    } else if (resultado.ocsNaoEncontradas.length === 0) {
+      msg = `Relatórios gerados para ${resultado.ocsEncontradas.length} OC(s)!`;
+    } else {
+      msg = `Relatórios gerados para ${resultado.ocsEncontradas.length} OC(s). ⚠️ ${resultado.ocsNaoEncontradas.length} OC(s) não encontrada(s).`;
+    }
 
     return { success: true, message: msg };
 
@@ -398,10 +404,12 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
     }
   }
 
-  // Verifica se encontrou algum item
+  // Verifica quais OCs foram encontradas e quais não
   const ocsEncontradas = Object.keys(itensPorOC);
+  const ocsNaoEncontradas = ocs.filter(oc => !ocsEncontradas.includes(oc));
+
   if (ocsEncontradas.length === 0) {
-    return null;
+    return { html: null, ocsEncontradas: [], ocsNaoEncontradas: ocsNaoEncontradas };
   }
 
   // Gera HTML com LOGO e destaque da OC - OTIMIZADO PARA LASER P&B VERTICAL
@@ -419,16 +427,6 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
           background: #fff;
           color: #000;
         }
-        .header-logo {
-          text-align: center;
-          margin-bottom: 15px;
-          padding-bottom: 10px;
-          border-bottom: 2px solid #000;
-        }
-        .header-logo img {
-          max-width: 180px;
-          height: auto;
-        }
         .oc-section {
           margin-bottom: 30px;
           page-break-after: always;
@@ -436,9 +434,17 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
           padding: 15px;
         }
         .header {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 15px;
           margin-bottom: 15px;
           padding-bottom: 10px;
           border-bottom: 1px solid #000;
+        }
+        .header img {
+          max-width: 80px;
+          height: auto;
         }
         .header h2 {
           margin: 0;
@@ -528,14 +534,35 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
           text-align: center;
           font-size: 9px;
         }
+        .aviso-ocs {
+          background: #fff3cd;
+          border: 2px solid #856404;
+          padding: 15px;
+          margin-bottom: 20px;
+          border-radius: 5px;
+        }
+        .aviso-ocs h3 {
+          color: #856404;
+          margin-bottom: 10px;
+          font-size: 14px;
+        }
+        .aviso-ocs ul {
+          margin-left: 20px;
+          color: #856404;
+          font-size: 12px;
+        }
+        .aviso-ocs li {
+          margin-bottom: 5px;
+        }
         @media print {
           .btn-print { display: none !important; }
+          .aviso-ocs { display: none !important; }
           body {
             padding: 0.5cm;
             font-size: 9px;
           }
-          .header-logo img {
-            max-width: 150px;
+          .header img {
+            max-width: 60px;
           }
           .oc-section {
             page-break-after: always;
@@ -560,11 +587,25 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
     </head>
     <body>
       <button class="btn-print" onclick="window.print()">🖨️ IMPRIMIR RELATÓRIO(S)</button>
-
-      <div class="header-logo">
-        <img src="https://i.ibb.co/FGGjdsM/LOGO-MARFIM.jpg" alt="Logo MARFIM" onerror="this.style.display='none'">
-      </div>
   `;
+
+  // Mostra aviso se houver OCs não encontradas
+  if (ocsNaoEncontradas.length > 0) {
+    html += `
+      <div class="aviso-ocs">
+        <h3>⚠️ Atenção: ${ocsNaoEncontradas.length} OC(s) não encontrada(s)</h3>
+        <p><strong>As seguintes OCs não foram encontradas na planilha:</strong></p>
+        <ul>
+    `;
+    ocsNaoEncontradas.forEach(oc => {
+      html += `<li>OC: <strong>${oc}</strong></li>`;
+    });
+    html += `
+        </ul>
+        <p style="margin-top: 10px;"><em>Os relatórios das OCs encontradas (${ocsEncontradas.length}) serão gerados normalmente.</em></p>
+      </div>
+    `;
+  }
 
   // Gera uma seção para cada OC
   ocsEncontradas.forEach((oc, index) => {
@@ -575,6 +616,7 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
     html += `
       <div class="oc-section">
         <div class="header">
+          <img src="https://i.ibb.co/FGGjdsM/LOGO-MARFIM.jpg" alt="Logo MARFIM" onerror="this.style.display='none'">
           <h2>📋 RELATÓRIO DE PRODUÇÃO</h2>
         </div>
 
@@ -647,7 +689,11 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
     </html>
   `;
 
-  return html;
+  return {
+    html: html,
+    ocsEncontradas: ocsEncontradas,
+    ocsNaoEncontradas: ocsNaoEncontradas
+  };
 }
 
 function gerarRelatorioOC() {
