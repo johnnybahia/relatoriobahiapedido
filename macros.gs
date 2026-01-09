@@ -404,7 +404,7 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
     return null;
   }
 
-  // Gera HTML com LOGO e destaque da OC
+  // Gera HTML com LOGO e destaque da OC - OTIMIZADO PARA LASER P&B VERTICAL
   let html = `
     <!DOCTYPE html>
     <html>
@@ -414,135 +414,147 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
           font-family: Arial, sans-serif;
-          font-size: 12px;
-          padding: 20px;
+          font-size: 10px;
+          padding: 15px;
           background: #fff;
+          color: #000;
         }
         .header-logo {
           text-align: center;
-          margin-bottom: 20px;
-          padding-bottom: 15px;
-          border-bottom: 3px solid #8B4513;
+          margin-bottom: 15px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid #000;
         }
         .header-logo img {
-          max-width: 250px;
+          max-width: 180px;
           height: auto;
         }
         .oc-section {
-          margin-bottom: 40px;
+          margin-bottom: 30px;
           page-break-after: always;
-          border: 2px solid #8B4513;
-          padding: 20px;
-          border-radius: 8px;
-          background: #fffef8;
+          border: 3px double #000;
+          padding: 15px;
         }
         .header {
-          margin-bottom: 20px;
-          padding-bottom: 15px;
-          border-bottom: 2px solid #8B4513;
+          margin-bottom: 15px;
+          padding-bottom: 10px;
+          border-bottom: 1px solid #000;
         }
         .header h2 {
           margin: 0;
-          color: #333;
-          font-size: 18px;
+          color: #000;
+          font-size: 14px;
+          text-align: center;
         }
         .oc-destaque {
-          background: #8B4513;
-          color: white;
-          padding: 15px;
-          margin: 15px 0;
-          border-radius: 5px;
+          border: 4px double #000;
+          padding: 12px;
+          margin: 12px 0;
           text-align: center;
-          font-size: 24px;
+          font-size: 20px;
           font-weight: bold;
-          letter-spacing: 2px;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        }
-        .info-grid {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 8px;
-          padding: 8px;
-          background: #f9f9f9;
-          border-radius: 4px;
-        }
-        .info-grid strong { color: #8B4513; }
-        .destaque-marca {
-          font-size: 16px;
-          margin-top: 10px;
-          color: #8B4513;
-          font-weight: bold;
-          padding: 10px;
+          letter-spacing: 1px;
           background: #fff;
-          border-left: 4px solid #8B4513;
+          color: #000;
+        }
+        .info-line {
+          margin-bottom: 6px;
+          padding: 5px 0;
+          border-bottom: 1px dotted #666;
+        }
+        .info-line strong {
+          font-weight: bold;
+          text-transform: uppercase;
+        }
+        .destaque-marca {
+          font-size: 12px;
+          margin-top: 8px;
+          font-weight: bold;
+          padding: 8px;
+          border: 2px solid #000;
+          text-align: center;
+          background: #fff;
         }
         table {
           width: 100%;
           border-collapse: collapse;
-          margin-top: 15px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          margin-top: 12px;
         }
         th, td {
-          border: 1px solid #8B4513;
-          padding: 8px;
+          border: 1px solid #000;
+          padding: 5px 3px;
           text-align: center;
-          font-size: 11px;
+          font-size: 9px;
+          background: #fff;
         }
         th {
-          background-color: #8B4513;
-          color: white;
           font-weight: bold;
           text-transform: uppercase;
+          border: 2px solid #000;
         }
-        tr:nth-child(even) {
-          background-color: #f9f9f9;
+        .text-left {
+          text-align: left;
+          font-size: 8px;
         }
-        tr:hover {
-          background-color: #fff8dc;
-        }
-        .text-left { text-align: left; }
+        .col-pedido { width: 8%; }
+        .col-cod-cliente { width: 8%; }
+        .col-cod-marfim { width: 8%; }
+        .col-descricao { width: 25%; }
+        .col-tamanho { width: 6%; }
+        .col-qtd { width: 7%; }
+        .col-lotes { width: 8%; }
+        .col-os { width: 8%; }
+        .col-data { width: 8%; }
+        .col-prazo { width: 6%; }
         .btn-print {
-          padding: 12px 30px;
-          background: #8B4513;
+          padding: 10px 25px;
+          background: #333;
           color: white;
-          border: none;
+          border: 2px solid #000;
           cursor: pointer;
-          font-size: 16px;
+          font-size: 14px;
           font-weight: bold;
-          margin-bottom: 20px;
+          margin-bottom: 15px;
           display: block;
-          border-radius: 5px;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.2);
           transition: all 0.3s;
         }
         .btn-print:hover {
-          background: #A0522D;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 8px rgba(0,0,0,0.3);
+          background: #555;
         }
         .rodape {
-          margin-top: 30px;
-          padding-top: 15px;
-          border-top: 2px solid #8B4513;
+          margin-top: 20px;
+          padding-top: 10px;
+          border-top: 1px solid #000;
           text-align: center;
-          color: #666;
-          font-size: 11px;
+          font-size: 9px;
         }
         @media print {
-          .btn-print { display: none; }
-          body { padding: 0; }
+          .btn-print { display: none !important; }
+          body {
+            padding: 0.5cm;
+            font-size: 9px;
+          }
+          .header-logo img {
+            max-width: 150px;
+          }
           .oc-section {
             page-break-after: always;
-            border: none;
-            padding: 0;
+            padding: 10px;
           }
           .oc-section:last-child {
             page-break-after: auto;
           }
-          @page {
-            size: landscape;
-            margin: 1.5cm;
+          .oc-destaque {
+            font-size: 18px;
+            padding: 10px;
           }
+          @page {
+            size: portrait;
+            margin: 1cm;
+          }
+        }
+        @media screen {
+          body { max-width: 21cm; margin: 0 auto; }
         }
       </style>
     </head>
@@ -563,37 +575,39 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
     html += `
       <div class="oc-section">
         <div class="header">
-          <div class="info-grid">
-            <div><strong>RELATÓRIO DE PRODUÇÃO</strong></div>
-            <div><strong>Data:</strong> ${dataHoje}</div>
-          </div>
-          <div class="info-grid">
-            <div><strong>CLIENTE:</strong> ${cliente}</div>
-          </div>
+          <h2>📋 RELATÓRIO DE PRODUÇÃO</h2>
         </div>
 
         <div class="oc-destaque">
-          📋 ORDEM DE COMPRA (OC): ${oc}
+          ORDEM DE COMPRA: ${oc}
+        </div>
+
+        <div class="info-line">
+          <strong>Cliente:</strong> ${cliente}
+        </div>
+
+        <div class="info-line">
+          <strong>Data:</strong> ${dataHoje}
         </div>
 
         <div class="destaque-marca">
-          <strong>MARCA:</strong> ${String(marca).toUpperCase()}
+          MARCA: ${String(marca).toUpperCase()}
         </div>
 
         <table>
           <thead>
             <tr>
-              <th>PEDIDO</th>
-              <th>CÓD. CLIENTE</th>
-              <th>CÓD. MARFIM</th>
-              <th>DESCRIÇÃO</th>
-              <th>TAMANHO</th>
-              <th>QTD. ABERTA</th>
-              <th>LOTES</th>
-              <th>CÓD. OS</th>
-              <th>DT. REC.</th>
-              <th>DT. ENT.</th>
-              <th>PRAZO</th>
+              <th class="col-pedido">PEDIDO</th>
+              <th class="col-cod-cliente">CÓD.<br>CLIENTE</th>
+              <th class="col-cod-marfim">CÓD.<br>MARFIM</th>
+              <th class="col-descricao">DESCRIÇÃO</th>
+              <th class="col-tamanho">TAM.</th>
+              <th class="col-qtd">QTD.<br>ABERTA</th>
+              <th class="col-lotes">LOTES</th>
+              <th class="col-os">CÓD.<br>OS</th>
+              <th class="col-data">DT.<br>REC.</th>
+              <th class="col-data">DT.<br>ENT.</th>
+              <th class="col-prazo">PRAZO</th>
             </tr>
           </thead>
           <tbody>
@@ -602,17 +616,17 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
     itens.forEach(item => {
       html += `
         <tr>
-          <td>${item.pedido}</td>
-          <td>${item.codCliente}</td>
-          <td>${item.codMarfim}</td>
-          <td class="text-left">${item.descricao}</td>
-          <td>${item.tamanho}</td>
-          <td>${item.qtdAberta}</td>
-          <td>${item.lotes}</td>
-          <td>${item.codOs}</td>
-          <td>${item.dtRec}</td>
-          <td>${item.dtEnt}</td>
-          <td>${item.prazo}</td>
+          <td class="col-pedido">${item.pedido}</td>
+          <td class="col-cod-cliente">${item.codCliente}</td>
+          <td class="col-cod-marfim">${item.codMarfim}</td>
+          <td class="col-descricao text-left">${item.descricao}</td>
+          <td class="col-tamanho">${item.tamanho}</td>
+          <td class="col-qtd">${item.qtdAberta}</td>
+          <td class="col-lotes">${item.lotes}</td>
+          <td class="col-os">${item.codOs}</td>
+          <td class="col-data">${item.dtRec}</td>
+          <td class="col-data">${item.dtEnt}</td>
+          <td class="col-prazo">${item.prazo}</td>
         </tr>
       `;
     });
