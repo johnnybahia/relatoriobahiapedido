@@ -1239,7 +1239,7 @@
           }
 
           if (resultado.timestamp) {
-            document.getElementById('timestampFaturamento').textContent = resultado.timestamp;
+            document.getElementById('timestampFaturamento').textContent = 'Último faturamento: ' + resultado.timestamp;
           } else {
             document.getElementById('timestampFaturamento').textContent = 'Aguardando primeira verificação';
           }
@@ -1280,7 +1280,7 @@
           document.getElementById('listaFaturamento').innerHTML =
             '<div class="empty-state-faturamento"><div class="empty-state-icon-faturamento">❌</div>Erro: ' + error.message + '</div>';
         })
-        .getFaturamentoDia();
+        .getUltimoFaturamento();
     }
 
     // ========================================
