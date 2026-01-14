@@ -192,45 +192,68 @@ function lerDados1() {
 }
 
 /**
- * Busca a marca de uma OC na aba "Dados" (aba principal)
- * @param {string} oc - Ordem de Compra
- * @returns {string} Nome da marca ou "Sem Marca"
+ * Cria um mapa de OC -> Marca carregando TODAS as linhas de uma vez (OTIMIZADO)
+ * @returns {Object} Mapa com OC como chave e marca como valor
  */
-function buscarMarcaPorOC(oc) {
+function criarMapaOCMarca() {
   try {
-    if (!oc) return "Sem Marca";
-
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados");
-    if (!sheet) return "Sem Marca";
-
-    var lastRow = sheet.getLastRow();
-    if (lastRow < 2) return "Sem Marca";
-
-    // Busca nas últimas 1000 linhas (otimização)
-    var numLinhas = Math.min(1000, lastRow - 1);
-    var inicio = lastRow - numLinhas + 1;
-
-    // Pega apenas colunas OC (índice 10) e Marca (índice 5)
-    var dados = sheet.getRange(inicio, 1, numLinhas, 10).getValues();
-
-    // Percorre de trás pra frente (dados mais recentes primeiro)
-    for (var i = dados.length - 1; i >= 0; i--) {
-      var ocLinha = dados[i][9] ? dados[i][9].toString().trim() : ""; // Coluna J (índice 9)
-      if (ocLinha === oc.toString().trim()) {
-        var marca = dados[i][4] ? dados[i][4].toString().trim() : "Sem Marca"; // Coluna E (índice 4)
-        return marca;
-      }
+    if (!sheet) {
+      Logger.log("⚠️ Aba 'Dados' não encontrada");
+      return {};
     }
 
-    return "Sem Marca";
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log("⚠️ Aba 'Dados' vazia");
+      return {};
+    }
+
+    // Carrega TODAS as linhas (sem limite)
+    var numLinhas = lastRow - 1;
+    Logger.log("📥 Carregando mapa OC->Marca de TODAS as " + numLinhas + " linhas...");
+
+    // Pega apenas as colunas necessárias: Marca (E/5) e OC (J/10)
+    var dados = sheet.getRange(2, 1, numLinhas, 10).getValues();
+
+    var mapa = {};
+    var contador = 0;
+
+    // Percorre e cria o mapa
+    dados.forEach(function(row) {
+      var oc = row[9] ? row[9].toString().trim() : ""; // Coluna J (índice 9)
+      var marca = row[4] ? row[4].toString().trim() : "Sem Marca"; // Coluna E (índice 4)
+
+      if (oc && oc !== "") {
+        // Sobrescreve se já existe (pega a mais recente)
+        mapa[oc] = marca;
+        contador++;
+      }
+    });
+
+    Logger.log("✅ Mapa criado com " + Object.keys(mapa).length + " OCs únicas de " + numLinhas + " linhas");
+    return mapa;
+
   } catch (erro) {
-    Logger.log("❌ Erro ao buscar marca da OC " + oc + ": " + erro.toString());
-    return "Sem Marca";
+    Logger.log("❌ Erro ao criar mapa OC->Marca: " + erro.toString());
+    return {};
   }
 }
 
 /**
- * Retorna pedidos a faturar (card 1)
+ * Busca a marca de uma OC no mapa pré-carregado
+ * @param {string} oc - Ordem de Compra
+ * @param {Object} mapaOCMarca - Mapa de OC->Marca
+ * @returns {string} Nome da marca ou "Sem Marca"
+ */
+function buscarMarcaNoMapa(oc, mapaOCMarca) {
+  if (!oc || !mapaOCMarca) return "Sem Marca";
+  var ocLimpa = oc.toString().trim();
+  return mapaOCMarca[ocLimpa] || "Sem Marca";
+}
+
+/**
+ * Retorna pedidos a faturar (card 1) - OTIMIZADO
  * Agrupa por cliente+marca, soma valores
  */
 function getPedidosAFaturar() {
@@ -247,12 +270,17 @@ function getPedidosAFaturar() {
       };
     }
 
+    Logger.log("📦 " + dados.length + " registros lidos da aba Dados1");
+
+    // OTIMIZAÇÃO: Carrega todas as marcas de UMA VEZ
+    var mapaOCMarca = criarMapaOCMarca();
+
     // Agrupa por cliente+marca
     var agrupamentoMap = {};
 
     dados.forEach(function(item) {
-      // Busca a marca pela OC
-      var marca = buscarMarcaPorOC(item.ordemCompra);
+      // Busca a marca no mapa (rápido - O(1))
+      var marca = buscarMarcaNoMapa(item.ordemCompra, mapaOCMarca);
       var chave = item.cliente + "|" + marca;
 
       if (!agrupamentoMap[chave]) {
@@ -299,7 +327,7 @@ function getPedidosAFaturar() {
 }
 
 /**
- * Sistema de snapshot para detectar faturamento
+ * Sistema de snapshot para detectar faturamento - OTIMIZADO
  * Salva snapshot atual e retorna o que foi faturado desde o último snapshot
  */
 function getFaturamentoDia() {
@@ -338,6 +366,9 @@ function getFaturamentoDia() {
     // Compara com snapshot anterior
     var mapaAnterior = JSON.parse(snapshotAnterior);
 
+    // OTIMIZAÇÃO: Carrega mapa de marcas UMA VEZ
+    var mapaOCMarca = criarMapaOCMarca();
+
     Object.keys(mapaAnterior).forEach(function(oc) {
       var itemAnterior = mapaAnterior[oc];
       var itemAtual = mapaAtual[oc];
@@ -353,7 +384,8 @@ function getFaturamentoDia() {
       }
 
       if (valorFaturado > 0) {
-        var marca = buscarMarcaPorOC(oc);
+        // Busca marca no mapa (rápido)
+        var marca = buscarMarcaNoMapa(oc, mapaOCMarca);
 
         faturado.push({
           cliente: itemAnterior.cliente,
@@ -494,7 +526,7 @@ function setupTriggers() {
  * FUNÇÃO DE TESTE - Execute esta para verificar se está funcionando
  */
 function testarPedidosAFaturar() {
-  Logger.log("🧪 Iniciando teste completo...");
+  Logger.log("🧪 Iniciando teste completo OTIMIZADO...");
   Logger.log("=".repeat(50));
 
   // 1. Testa leitura da aba Dados1
@@ -512,32 +544,42 @@ function testarPedidosAFaturar() {
     return;
   }
 
-  // 2. Testa busca de marca
-  Logger.log("\n🔍 Passo 2: Testando busca de marca...");
+  // 2. Testa criação do mapa de marcas
+  Logger.log("\n🗺️ Passo 2: Testando criação do mapa OC->Marca...");
+  var inicio = new Date().getTime();
+  var mapaOCMarca = criarMapaOCMarca();
+  var tempoMapa = (new Date().getTime() - inicio) / 1000;
+  Logger.log("   Mapa criado em " + tempoMapa + " segundos");
+  Logger.log("   Total de OCs no mapa: " + Object.keys(mapaOCMarca).length);
+
+  // Testa busca de uma marca
   var ocTeste = dados[0].ordemCompra;
-  Logger.log("   Buscando marca para OC: " + ocTeste);
-  var marca = buscarMarcaPorOC(ocTeste);
+  Logger.log("   Testando busca para OC: " + ocTeste);
+  var marca = buscarMarcaNoMapa(ocTeste, mapaOCMarca);
   Logger.log("   Marca encontrada: " + marca);
 
   // 3. Testa função completa
   Logger.log("\n💼 Passo 3: Testando getPedidosAFaturar()...");
+  inicio = new Date().getTime();
   var resultado = getPedidosAFaturar();
+  var tempoTotal = (new Date().getTime() - inicio) / 1000;
+
   Logger.log("   Sucesso: " + resultado.sucesso);
   Logger.log("   Timestamp: " + resultado.timestamp);
   Logger.log("   Linhas retornadas: " + resultado.dados.length);
+  Logger.log("   ⏱️ Tempo de execução: " + tempoTotal + " segundos");
 
   if (resultado.dados.length > 0) {
-    Logger.log("\n   📊 Resultado final:");
-    resultado.dados.forEach(function(item, index) {
+    Logger.log("\n   📊 Primeiros 10 resultados:");
+    resultado.dados.slice(0, 10).forEach(function(item, index) {
       Logger.log("   " + (index + 1) + ". " + item.cliente + " | " + item.marca + " | R$ " + item.valor.toFixed(2));
     });
   }
 
   // 4. Retorna resultado formatado em JSON
   Logger.log("\n=".repeat(50));
-  Logger.log("✅ Teste concluído!");
-  Logger.log("\n📤 JSON que será enviado para o frontend:");
-  Logger.log(JSON.stringify(resultado, null, 2));
+  Logger.log("✅ Teste concluído com sucesso!");
+  Logger.log("🚀 Performance: " + tempoTotal + " segundos para " + dados.length + " registros");
 
   return resultado;
 }
@@ -569,4 +611,37 @@ function testarLeituraDados1() {
   } else {
     Logger.log("⚠️ Aba vazia (sem dados além do cabeçalho)");
   }
+}
+
+/**
+ * Verifica o tamanho das abas Dados e Dados1
+ */
+function verificarTamanhoAbas() {
+  Logger.log("📊 Verificando tamanho das abas...");
+  Logger.log("=".repeat(50));
+
+  // Verifica aba Dados
+  var sheetDados = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados");
+  if (sheetDados) {
+    var totalDados = sheetDados.getLastRow();
+    Logger.log("📌 Aba DADOS:");
+    Logger.log("   Total de linhas: " + totalDados);
+    Logger.log("   Linhas com dados: " + (totalDados - 1));
+  } else {
+    Logger.log("❌ Aba 'Dados' não encontrada!");
+  }
+
+  // Verifica aba Dados1
+  var sheetDados1 = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados1");
+  if (sheetDados1) {
+    var totalDados1 = sheetDados1.getLastRow();
+    Logger.log("\n📌 Aba DADOS1:");
+    Logger.log("   Total de linhas: " + totalDados1);
+    Logger.log("   Linhas com dados: " + (totalDados1 - 1));
+  } else {
+    Logger.log("\n❌ Aba 'Dados1' não encontrada!");
+  }
+
+  Logger.log("\n" + "=".repeat(50));
+  Logger.log("✅ Verificação concluída!");
 }
