@@ -146,3 +146,351 @@ function formatarValor(valor) {
   // Se já vier formatado, retorna como está
   return valor.toString();
 }
+
+// ========================================
+// SISTEMA DE FATURAMENTO
+// ========================================
+
+/**
+ * Lê dados da aba "Dados1" (ordem de compra, valor, cliente)
+ * @returns {Array} Array de objetos com os dados
+ */
+function lerDados1() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados1");
+    if (!sheet) {
+      Logger.log("⚠️ Aba 'Dados1' não encontrada");
+      return [];
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log("⚠️ Aba 'Dados1' vazia (sem dados além do cabeçalho)");
+      return [];
+    }
+
+    // Pega dados a partir da linha 2 (pula cabeçalho)
+    var dados = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+
+    var resultado = [];
+    dados.forEach(function(row) {
+      if (row[0] && row[1]) { // Precisa ter pelo menos OC e Valor
+        resultado.push({
+          ordemCompra: row[0].toString().trim(),
+          valor: typeof row[1] === 'number' ? row[1] : parseFloat(row[1]) || 0,
+          cliente: row[2] ? row[2].toString().trim() : "Sem Cliente"
+        });
+      }
+    });
+
+    Logger.log("✅ Lidos " + resultado.length + " registros da aba Dados1");
+    return resultado;
+  } catch (erro) {
+    Logger.log("❌ Erro ao ler Dados1: " + erro.toString());
+    return [];
+  }
+}
+
+/**
+ * Busca a marca de uma OC na aba "Dados" (aba principal)
+ * @param {string} oc - Ordem de Compra
+ * @returns {string} Nome da marca ou "Sem Marca"
+ */
+function buscarMarcaPorOC(oc) {
+  try {
+    if (!oc) return "Sem Marca";
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados");
+    if (!sheet) return "Sem Marca";
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return "Sem Marca";
+
+    // Busca nas últimas 1000 linhas (otimização)
+    var numLinhas = Math.min(1000, lastRow - 1);
+    var inicio = lastRow - numLinhas + 1;
+
+    // Pega apenas colunas OC (índice 10) e Marca (índice 5)
+    var dados = sheet.getRange(inicio, 1, numLinhas, 10).getValues();
+
+    // Percorre de trás pra frente (dados mais recentes primeiro)
+    for (var i = dados.length - 1; i >= 0; i--) {
+      var ocLinha = dados[i][9] ? dados[i][9].toString().trim() : ""; // Coluna J (índice 9)
+      if (ocLinha === oc.toString().trim()) {
+        var marca = dados[i][4] ? dados[i][4].toString().trim() : "Sem Marca"; // Coluna E (índice 4)
+        return marca;
+      }
+    }
+
+    return "Sem Marca";
+  } catch (erro) {
+    Logger.log("❌ Erro ao buscar marca da OC " + oc + ": " + erro.toString());
+    return "Sem Marca";
+  }
+}
+
+/**
+ * Retorna pedidos a faturar (card 1)
+ * Agrupa por cliente, soma valores e busca marcas
+ */
+function getPedidosAFaturar() {
+  try {
+    Logger.log("📊 Iniciando getPedidosAFaturar...");
+
+    var dados = lerDados1();
+
+    if (dados.length === 0) {
+      return {
+        sucesso: true,
+        timestamp: obterTimestamp(),
+        dados: []
+      };
+    }
+
+    // Agrupa por cliente
+    var clientesMap = {};
+
+    dados.forEach(function(item) {
+      var cliente = item.cliente;
+
+      if (!clientesMap[cliente]) {
+        clientesMap[cliente] = {
+          valor: 0,
+          ocs: []
+        };
+      }
+
+      clientesMap[cliente].valor += item.valor;
+      clientesMap[cliente].ocs.push(item.ordemCompra);
+    });
+
+    // Converte para array e busca marcas
+    var resultado = [];
+
+    Object.keys(clientesMap).forEach(function(cliente) {
+      var info = clientesMap[cliente];
+
+      // Busca a marca da primeira OC desse cliente
+      var marca = "Sem Marca";
+      if (info.ocs.length > 0) {
+        marca = buscarMarcaPorOC(info.ocs[0]);
+      }
+
+      resultado.push({
+        cliente: cliente,
+        valor: info.valor,
+        marca: marca
+      });
+    });
+
+    // Ordena por valor (maior primeiro)
+    resultado.sort(function(a, b) {
+      return b.valor - a.valor;
+    });
+
+    Logger.log("✅ getPedidosAFaturar concluído: " + resultado.length + " clientes");
+
+    return {
+      sucesso: true,
+      timestamp: obterTimestamp(),
+      dados: resultado
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro em getPedidosAFaturar: " + erro.toString());
+    return {
+      sucesso: false,
+      timestamp: obterTimestamp(),
+      dados: [],
+      erro: erro.toString()
+    };
+  }
+}
+
+/**
+ * Sistema de snapshot para detectar faturamento
+ * Salva snapshot atual e retorna o que foi faturado desde o último snapshot
+ */
+function getFaturamentoDia() {
+  try {
+    Logger.log("💰 Iniciando getFaturamentoDia...");
+
+    var props = PropertiesService.getScriptProperties();
+    var snapshotAnterior = props.getProperty('SNAPSHOT_DADOS1');
+    var timestampAnterior = props.getProperty('SNAPSHOT_TIMESTAMP');
+
+    // Lê estado atual
+    var dadosAtuais = lerDados1();
+
+    // Cria map do estado atual (OC -> dados)
+    var mapaAtual = {};
+    dadosAtuais.forEach(function(item) {
+      mapaAtual[item.ordemCompra] = item;
+    });
+
+    var faturado = [];
+
+    // Se não há snapshot anterior, cria o primeiro
+    if (!snapshotAnterior) {
+      Logger.log("📸 Criando primeiro snapshot...");
+      props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
+      props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
+
+      return {
+        sucesso: true,
+        timestamp: timestampAnterior,
+        dados: [],
+        mensagem: "Primeiro snapshot criado. Aguardando próxima verificação."
+      };
+    }
+
+    // Compara com snapshot anterior
+    var mapaAnterior = JSON.parse(snapshotAnterior);
+
+    Object.keys(mapaAnterior).forEach(function(oc) {
+      var itemAnterior = mapaAnterior[oc];
+      var itemAtual = mapaAtual[oc];
+
+      var valorFaturado = 0;
+
+      if (!itemAtual) {
+        // OC sumiu = faturou tudo
+        valorFaturado = itemAnterior.valor;
+      } else if (itemAtual.valor < itemAnterior.valor) {
+        // Valor diminuiu = faturou a diferença
+        valorFaturado = itemAnterior.valor - itemAtual.valor;
+      }
+
+      if (valorFaturado > 0) {
+        var marca = buscarMarcaPorOC(oc);
+
+        faturado.push({
+          cliente: itemAnterior.cliente,
+          valor: valorFaturado,
+          marca: marca,
+          oc: oc
+        });
+      }
+    });
+
+    // Agrupa faturamento por cliente+marca
+    var faturadoAgrupado = {};
+
+    faturado.forEach(function(item) {
+      var chave = item.cliente + "|" + item.marca;
+
+      if (!faturadoAgrupado[chave]) {
+        faturadoAgrupado[chave] = {
+          cliente: item.cliente,
+          marca: item.marca,
+          valor: 0
+        };
+      }
+
+      faturadoAgrupado[chave].valor += item.valor;
+    });
+
+    var resultado = Object.keys(faturadoAgrupado).map(function(chave) {
+      return faturadoAgrupado[chave];
+    });
+
+    // Ordena por valor (maior primeiro)
+    resultado.sort(function(a, b) {
+      return b.valor - a.valor;
+    });
+
+    // Atualiza snapshot
+    props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
+    props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
+
+    Logger.log("✅ getFaturamentoDia concluído: " + resultado.length + " itens faturados");
+
+    return {
+      sucesso: true,
+      timestamp: timestampAnterior,
+      dados: resultado
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro em getFaturamentoDia: " + erro.toString());
+    return {
+      sucesso: false,
+      timestamp: null,
+      dados: [],
+      erro: erro.toString()
+    };
+  }
+}
+
+/**
+ * Função auxiliar para obter timestamp formatado
+ */
+function obterTimestamp() {
+  var agora = new Date();
+  var dia = ("0" + agora.getDate()).slice(-2);
+  var mes = ("0" + (agora.getMonth() + 1)).slice(-2);
+  var ano = agora.getFullYear();
+  var hora = ("0" + agora.getHours()).slice(-2);
+  var min = ("0" + agora.getMinutes()).slice(-2);
+
+  return dia + "/" + mes + "/" + ano + " às " + hora + ":" + min;
+}
+
+/**
+ * Função manual para executar a verificação de faturamento
+ * USE ESTA FUNÇÃO PARA EXECUTAR MANUALMENTE
+ */
+function executarVerificacaoFaturamento() {
+  Logger.log("🔄 Executando verificação manual de faturamento...");
+
+  var resultado = getFaturamentoDia();
+
+  if (resultado.sucesso) {
+    Logger.log("✅ Verificação concluída com sucesso!");
+    Logger.log("📊 Itens faturados: " + resultado.dados.length);
+
+    if (resultado.dados.length > 0) {
+      Logger.log("💰 Detalhes do faturamento:");
+      resultado.dados.forEach(function(item) {
+        Logger.log("   - " + item.cliente + " (" + item.marca + "): R$ " + item.valor.toFixed(2));
+      });
+    } else {
+      Logger.log("ℹ️ Nenhum faturamento detectado nesta verificação");
+    }
+  } else {
+    Logger.log("❌ Erro na verificação: " + resultado.erro);
+  }
+
+  return resultado;
+}
+
+/**
+ * Configura triggers automáticos (8h e 19h)
+ * EXECUTE ESTA FUNÇÃO UMA VEZ PARA CONFIGURAR OS HORÁRIOS AUTOMÁTICOS
+ */
+function setupTriggers() {
+  // Remove triggers antigos para evitar duplicação
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'executarVerificacaoFaturamento') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  // Cria trigger para 8h
+  ScriptApp.newTrigger('executarVerificacaoFaturamento')
+    .timeBased()
+    .atHour(8)
+    .everyDays(1)
+    .create();
+
+  // Cria trigger para 19h
+  ScriptApp.newTrigger('executarVerificacaoFaturamento')
+    .timeBased()
+    .atHour(19)
+    .everyDays(1)
+    .create();
+
+  Logger.log("✅ Triggers configurados com sucesso!");
+  Logger.log("⏰ Verificações automáticas às 8h e 19h todos os dias");
+}
