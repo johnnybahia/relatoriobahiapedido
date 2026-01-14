@@ -33,6 +33,11 @@ function onOpen() {
       .addItem('🖨️ Imprimir Relatório por OC(s)', 'mostrarDialogoOCs')
       .addSeparator()
       .addItem('🔧 Testar Macro (Debug)', 'testarMacroDebug')
+      .addSeparator()
+      .addSubMenu(ui.createMenu('💰 Faturamento')
+          .addItem('🔄 Atualizar Faturamento Agora', 'atualizarFaturamentoManual')
+          .addItem('⚙️ Configurar Triggers Automáticos (8h e 19h)', 'criarTriggersAutomaticos')
+          .addItem('🧹 Limpar Faturamento do Dia', 'limparFaturamentoDia'))
       .addToUi();
 }
 
@@ -1324,6 +1329,362 @@ function fetchAllData(cacheBuster) {
       error: 'fetchAllData: ' + err.message 
     };
   }
+}
+
+// ====== SISTEMA DE FATURAMENTO ======
+
+/**
+ * Lê dados da aba "Dados1" (Ordem de Compra, Valor, Cliente)
+ */
+function lerDados1() {
+  try {
+    const ss = _openSS_();
+    const sheet = ss.getSheetByName('Dados1');
+
+    if (!sheet) {
+      console.error('Aba Dados1 não encontrada');
+      return { success: false, error: 'Aba Dados1 não encontrada' };
+    }
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return { success: true, dados: [] };
+    }
+
+    const range = sheet.getRange(2, 1, lastRow - 1, 3);
+    const values = range.getValues();
+
+    const dados = [];
+    for (let i = 0; i < values.length; i++) {
+      const oc = String(values[i][0]).trim();
+      const valor = _toNumber_(values[i][1]);
+      const cliente = String(values[i][2]).trim();
+
+      if (oc && cliente) {
+        dados.push({ oc, valor, cliente });
+      }
+    }
+
+    console.log(`lerDados1: ${dados.length} registros lidos`);
+    return { success: true, dados };
+
+  } catch (error) {
+    console.error('Erro em lerDados1:', error);
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * Salva snapshot dos dados atuais para comparação futura
+ */
+function salvarSnapshot() {
+  try {
+    console.log('Salvando snapshot dos dados...');
+    const resultado = lerDados1();
+
+    if (!resultado.success) {
+      console.error('Erro ao ler dados para snapshot:', resultado.error);
+      return;
+    }
+
+    const props = PropertiesService.getScriptProperties();
+    const now = new Date();
+    const timestamp = Utilities.formatDate(now, TZ, 'dd/MM/yyyy HH:mm:ss');
+
+    props.setProperty('SNAPSHOT_DADOS', JSON.stringify(resultado.dados));
+    props.setProperty('SNAPSHOT_TIMESTAMP', timestamp);
+
+    console.log(`Snapshot salvo: ${resultado.dados.length} registros em ${timestamp}`);
+
+  } catch (error) {
+    console.error('Erro ao salvar snapshot:', error);
+  }
+}
+
+/**
+ * Detecta faturamento comparando dados atuais com snapshot anterior
+ */
+function detectarFaturamento() {
+  try {
+    console.log('Detectando faturamento...');
+    const props = PropertiesService.getScriptProperties();
+
+    // Lê snapshot anterior
+    const snapshotJson = props.getProperty('SNAPSHOT_DADOS');
+    if (!snapshotJson) {
+      console.log('Nenhum snapshot anterior encontrado. Salvando primeiro snapshot...');
+      salvarSnapshot();
+      return { faturados: [], timestamp: null };
+    }
+
+    const dadosAntigos = JSON.parse(snapshotJson);
+    const timestampAnterior = props.getProperty('SNAPSHOT_TIMESTAMP');
+
+    // Lê dados atuais
+    const resultado = lerDados1();
+    if (!resultado.success) {
+      console.error('Erro ao ler dados atuais');
+      return { faturados: [], timestamp: timestampAnterior };
+    }
+
+    const dadosAtuais = resultado.dados;
+
+    // Cria mapa dos dados atuais por OC
+    const mapaAtual = {};
+    dadosAtuais.forEach(d => {
+      mapaAtual[d.oc] = d;
+    });
+
+    // Detecta faturamento
+    const faturados = [];
+
+    dadosAntigos.forEach(dadoAntigo => {
+      const dadoAtual = mapaAtual[dadoAntigo.oc];
+
+      if (!dadoAtual) {
+        // OC sumiu = foi totalmente faturada
+        faturados.push({
+          oc: dadoAntigo.oc,
+          cliente: dadoAntigo.cliente,
+          valorFaturado: dadoAntigo.valor
+        });
+        console.log(`OC ${dadoAntigo.oc} foi faturada (sumiu): R$ ${dadoAntigo.valor}`);
+
+      } else if (dadoAtual.valor < dadoAntigo.valor) {
+        // Valor diminuiu = faturamento parcial
+        const valorFaturado = dadoAntigo.valor - dadoAtual.valor;
+        faturados.push({
+          oc: dadoAntigo.oc,
+          cliente: dadoAntigo.cliente,
+          valorFaturado: valorFaturado
+        });
+        console.log(`OC ${dadoAntigo.oc} faturamento parcial: R$ ${valorFaturado}`);
+      }
+    });
+
+    console.log(`Total de faturamentos detectados: ${faturados.length}`);
+
+    // Salva faturamento detectado
+    if (faturados.length > 0) {
+      const faturamentoAtual = props.getProperty('FATURAMENTO_DIA');
+      const faturamentoDia = faturamentoAtual ? JSON.parse(faturamentoAtual) : [];
+
+      faturados.forEach(f => faturamentoDia.push(f));
+
+      props.setProperty('FATURAMENTO_DIA', JSON.stringify(faturamentoDia));
+    }
+
+    // Salva novo snapshot
+    salvarSnapshot();
+
+    return { faturados, timestamp: timestampAnterior };
+
+  } catch (error) {
+    console.error('Erro ao detectar faturamento:', error);
+    return { faturados: [], timestamp: null };
+  }
+}
+
+/**
+ * Limpa faturamento do dia (executar no início do dia)
+ */
+function limparFaturamentoDia() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    props.setProperty('FATURAMENTO_DIA', JSON.stringify([]));
+    console.log('Faturamento do dia limpo');
+  } catch (error) {
+    console.error('Erro ao limpar faturamento:', error);
+  }
+}
+
+/**
+ * Função manual para atualizar faturamento
+ */
+function atualizarFaturamentoManual() {
+  console.log('=== ATUALIZAÇÃO MANUAL DE FATURAMENTO ===');
+  const resultado = detectarFaturamento();
+  console.log(`Faturamentos detectados: ${resultado.faturados.length}`);
+  console.log('=== FIM DA ATUALIZAÇÃO ===');
+
+  const ui = SpreadsheetApp.getUi();
+  if (resultado.faturados.length > 0) {
+    ui.alert(`✅ Faturamento atualizado!\n\n${resultado.faturados.length} movimentação(ões) detectada(s).`);
+  } else {
+    ui.alert('ℹ️ Nenhuma mudança detectada desde a última verificação.');
+  }
+}
+
+/**
+ * Processa dados para o card "Pedidos a Faturar"
+ */
+function getPedidosAFaturar() {
+  try {
+    const resultado = lerDados1();
+    if (!resultado.success || resultado.dados.length === 0) {
+      return {
+        sucesso: true,
+        dados: [],
+        timestamp: Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm:ss')
+      };
+    }
+
+    const ss = _openSS_();
+    const sheetMarcas = ss.getSheetByName(ABA_MARCAS_NOME);
+    const marcasMap = {};
+
+    if (sheetMarcas) {
+      const dadosMarcas = sheetMarcas.getDataRange().getValues();
+      for (let i = 1; i < dadosMarcas.length; i++) {
+        const oc = String(dadosMarcas[i][0]).trim();
+        const marca = dadosMarcas[i][1];
+        if (oc) marcasMap[oc] = marca;
+      }
+    }
+
+    // Agrupa por cliente
+    const porCliente = {};
+
+    resultado.dados.forEach(item => {
+      const marca = marcasMap[item.oc] || 'N/A';
+      const chave = `${item.cliente}|${marca}`;
+
+      if (!porCliente[chave]) {
+        porCliente[chave] = {
+          cliente: item.cliente,
+          marca: marca,
+          valor: 0
+        };
+      }
+
+      porCliente[chave].valor += item.valor;
+    });
+
+    const dados = Object.values(porCliente).sort((a, b) => b.valor - a.valor);
+
+    return {
+      sucesso: true,
+      dados: dados,
+      timestamp: Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm:ss')
+    };
+
+  } catch (error) {
+    console.error('Erro em getPedidosAFaturar:', error);
+    return { sucesso: false, erro: error.toString() };
+  }
+}
+
+/**
+ * Processa dados para o card "Faturamento do Dia"
+ */
+function getFaturamentoDia() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const faturamentoJson = props.getProperty('FATURAMENTO_DIA');
+
+    if (!faturamentoJson) {
+      return {
+        sucesso: true,
+        dados: [],
+        timestamp: null
+      };
+    }
+
+    const faturados = JSON.parse(faturamentoJson);
+
+    if (faturados.length === 0) {
+      return {
+        sucesso: true,
+        dados: [],
+        timestamp: props.getProperty('SNAPSHOT_TIMESTAMP')
+      };
+    }
+
+    const ss = _openSS_();
+    const sheetMarcas = ss.getSheetByName(ABA_MARCAS_NOME);
+    const marcasMap = {};
+
+    if (sheetMarcas) {
+      const dadosMarcas = sheetMarcas.getDataRange().getValues();
+      for (let i = 1; i < dadosMarcas.length; i++) {
+        const oc = String(dadosMarcas[i][0]).trim();
+        const marca = dadosMarcas[i][1];
+        if (oc) marcasMap[oc] = marca;
+      }
+    }
+
+    // Agrupa por cliente e marca
+    const porCliente = {};
+
+    faturados.forEach(item => {
+      const marca = marcasMap[item.oc] || 'N/A';
+      const chave = `${item.cliente}|${marca}`;
+
+      if (!porCliente[chave]) {
+        porCliente[chave] = {
+          cliente: item.cliente,
+          marca: marca,
+          valor: 0
+        };
+      }
+
+      porCliente[chave].valor += item.valorFaturado;
+    });
+
+    const dados = Object.values(porCliente).sort((a, b) => b.valor - a.valor);
+
+    return {
+      sucesso: true,
+      dados: dados,
+      timestamp: props.getProperty('SNAPSHOT_TIMESTAMP')
+    };
+
+  } catch (error) {
+    console.error('Erro em getFaturamentoDia:', error);
+    return { sucesso: false, erro: error.toString() };
+  }
+}
+
+/**
+ * Cria triggers automáticos para 8h e 19h
+ */
+function criarTriggersAutomaticos() {
+  // Remove triggers antigos primeiro
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'detectarFaturamento' ||
+        trigger.getHandlerFunction() === 'limparFaturamentoDia') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  // Trigger às 8h (limpa e detecta)
+  ScriptApp.newTrigger('limparFaturamentoDia')
+    .timeBased()
+    .atHour(8)
+    .everyDays(1)
+    .create();
+
+  ScriptApp.newTrigger('detectarFaturamento')
+    .timeBased()
+    .atHour(8)
+    .everyDays(1)
+    .create();
+
+  // Trigger às 19h (detecta)
+  ScriptApp.newTrigger('detectarFaturamento')
+    .timeBased()
+    .atHour(19)
+    .everyDays(1)
+    .create();
+
+  console.log('Triggers automáticos criados: 8h (limpa + detecta) e 19h (detecta)');
+
+  const ui = SpreadsheetApp.getUi();
+  ui.alert('✅ Triggers automáticos configurados!\n\n' +
+           '• 8h da manhã: Limpa faturamento anterior e inicia novo monitoramento\n' +
+           '• 19h da noite: Detecta faturamento do dia\n\n' +
+           'O sistema agora irá monitorar automaticamente.');
 }
 
 // ====== CONTADOR DE ACESSOS (sem alteração) ======

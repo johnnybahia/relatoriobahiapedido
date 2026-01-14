@@ -1,0 +1,245 @@
+<!--
+  INSTRUÇÕES: Adicione este código HTML no arquivo Index.html do Google Apps Script
+  Localize onde está o card "Totais por Marca" e adicione ABAIXO dele
+-->
+
+<!-- CARD: PEDIDOS A FATURAR -->
+<div class="card" id="cardPedidosAFaturar">
+  <div class="card-header">
+    <h3>💼 Pedidos a Faturar</h3>
+    <span class="timestamp" id="timestampPedidos">Carregando...</span>
+  </div>
+  <div class="card-body">
+    <div id="listaPedidos" class="loading">Carregando dados...</div>
+  </div>
+</div>
+
+<!-- CARD: FATURAMENTO DO DIA -->
+<div class="card" id="cardFaturamentoDia">
+  <div class="card-header">
+    <h3>💰 Faturamento do Dia</h3>
+    <span class="timestamp" id="timestampFaturamento">Carregando...</span>
+  </div>
+  <div class="card-body">
+    <div id="listaFaturamento" class="loading">Carregando dados...</div>
+  </div>
+</div>
+
+<!-- ESTILOS CSS (adicione no <style> existente) -->
+<style>
+  .card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e0e0e0;
+  }
+
+  .card-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 18px;
+  }
+
+  .timestamp {
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+  }
+
+  .card-body {
+    min-height: 100px;
+  }
+
+  .loading {
+    text-align: center;
+    padding: 20px;
+    color: #999;
+  }
+
+  .table-faturamento {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .table-faturamento th {
+    background: #f5f5f5;
+    padding: 10px;
+    text-align: left;
+    font-weight: bold;
+    border-bottom: 2px solid #ddd;
+  }
+
+  .table-faturamento td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .table-faturamento tr:hover {
+    background: #f9f9f9;
+  }
+
+  .valor {
+    font-weight: bold;
+    color: #2e7d32;
+  }
+
+  .marca-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    background: #e3f2fd;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #1976d2;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 30px;
+    color: #999;
+  }
+
+  .empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 10px;
+  }
+
+  .total-row {
+    font-weight: bold;
+    background: #f5f5f5 !important;
+    border-top: 2px solid #333 !important;
+  }
+</style>
+
+<!-- JAVASCRIPT (adicione no <script> existente ou antes de </body>) -->
+<script>
+  // Carrega dados dos Pedidos a Faturar
+  function carregarPedidosAFaturar() {
+    document.getElementById('listaPedidos').innerHTML = '<div class="loading">Carregando...</div>';
+
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        if (!resultado.sucesso) {
+          document.getElementById('listaPedidos').innerHTML =
+            '<div class="empty-state"><div class="empty-state-icon">⚠️</div>Erro ao carregar dados</div>';
+          return;
+        }
+
+        document.getElementById('timestampPedidos').textContent =
+          'Atualizado: ' + resultado.timestamp;
+
+        if (resultado.dados.length === 0) {
+          document.getElementById('listaPedidos').innerHTML =
+            '<div class="empty-state"><div class="empty-state-icon">📭</div>Nenhum pedido a faturar</div>';
+          return;
+        }
+
+        let html = '<table class="table-faturamento">';
+        html += '<thead><tr><th>Cliente</th><th>Marca</th><th>Valor Total</th></tr></thead>';
+        html += '<tbody>';
+
+        let totalGeral = 0;
+
+        resultado.dados.forEach(function(item) {
+          html += '<tr>';
+          html += '<td>' + item.cliente + '</td>';
+          html += '<td><span class="marca-badge">' + item.marca + '</span></td>';
+          html += '<td class="valor">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + '</td>';
+          html += '</tr>';
+          totalGeral += item.valor;
+        });
+
+        html += '<tr class="total-row">';
+        html += '<td colspan="2"><strong>TOTAL GERAL</strong></td>';
+        html += '<td class="valor">R$ ' + totalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + '</td>';
+        html += '</tr>';
+
+        html += '</tbody></table>';
+
+        document.getElementById('listaPedidos').innerHTML = html;
+      })
+      .withFailureHandler(function(error) {
+        document.getElementById('listaPedidos').innerHTML =
+          '<div class="empty-state"><div class="empty-state-icon">❌</div>Erro: ' + error.message + '</div>';
+      })
+      .getPedidosAFaturar();
+  }
+
+  // Carrega dados do Faturamento do Dia
+  function carregarFaturamentoDia() {
+    document.getElementById('listaFaturamento').innerHTML = '<div class="loading">Carregando...</div>';
+
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        if (!resultado.sucesso) {
+          document.getElementById('listaFaturamento').innerHTML =
+            '<div class="empty-state"><div class="empty-state-icon">⚠️</div>Erro ao carregar dados</div>';
+          return;
+        }
+
+        if (resultado.timestamp) {
+          document.getElementById('timestampFaturamento').textContent =
+            'Última verificação: ' + resultado.timestamp;
+        } else {
+          document.getElementById('timestampFaturamento').textContent =
+            'Aguardando primeira verificação';
+        }
+
+        if (resultado.dados.length === 0) {
+          document.getElementById('listaFaturamento').innerHTML =
+            '<div class="empty-state"><div class="empty-state-icon">📊</div>Nenhum faturamento detectado hoje</div>';
+          return;
+        }
+
+        let html = '<table class="table-faturamento">';
+        html += '<thead><tr><th>Cliente</th><th>Marca</th><th>Valor Faturado</th></tr></thead>';
+        html += '<tbody>';
+
+        let totalGeral = 0;
+
+        resultado.dados.forEach(function(item) {
+          html += '<tr>';
+          html += '<td>' + item.cliente + '</td>';
+          html += '<td><span class="marca-badge">' + item.marca + '</span></td>';
+          html += '<td class="valor">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + '</td>';
+          html += '</tr>';
+          totalGeral += item.valor;
+        });
+
+        html += '<tr class="total-row">';
+        html += '<td colspan="2"><strong>TOTAL FATURADO</strong></td>';
+        html += '<td class="valor">R$ ' + totalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + '</td>';
+        html += '</tr>';
+
+        html += '</tbody></table>';
+
+        document.getElementById('listaFaturamento').innerHTML = html;
+      })
+      .withFailureHandler(function(error) {
+        document.getElementById('listaFaturamento').innerHTML =
+          '<div class="empty-state"><div class="empty-state-icon">❌</div>Erro: ' + error.message + '</div>';
+      })
+      .getFaturamentoDia();
+  }
+
+  // Carrega os dois cards quando a página carrega
+  window.addEventListener('load', function() {
+    carregarPedidosAFaturar();
+    carregarFaturamentoDia();
+
+    // Atualiza a cada 5 minutos
+    setInterval(function() {
+      carregarPedidosAFaturar();
+      carregarFaturamentoDia();
+    }, 5 * 60 * 1000);
+  });
+</script>
