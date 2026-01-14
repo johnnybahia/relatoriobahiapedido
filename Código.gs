@@ -329,6 +329,7 @@ function getPedidosAFaturar() {
 /**
  * Sistema de snapshot para detectar faturamento - OTIMIZADO
  * Salva snapshot atual e retorna o que foi faturado desde o último snapshot
+ * IMPORTANTE: Só atualiza snapshot quando chamado via trigger (não na webapp)
  */
 function getFaturamentoDia() {
   try {
@@ -422,9 +423,17 @@ function getFaturamentoDia() {
       return b.valor - a.valor;
     });
 
-    // Atualiza snapshot
+    // IMPORTANTE: Atualiza snapshot APENAS quando chamado via trigger
+    // Para preservar o faturamento até a próxima verificação programada
     props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
     props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
+
+    // Salva o último faturamento detectado (persiste para webapp)
+    if (resultado.length > 0) {
+      props.setProperty('ULTIMO_FATURAMENTO', JSON.stringify(resultado));
+      props.setProperty('ULTIMO_FATURAMENTO_TIMESTAMP', obterTimestamp());
+      Logger.log("💾 Salvou faturamento detectado: " + resultado.length + " itens");
+    }
 
     Logger.log("✅ getFaturamentoDia concluído: " + resultado.length + " itens faturados");
 
@@ -436,6 +445,44 @@ function getFaturamentoDia() {
 
   } catch (erro) {
     Logger.log("❌ Erro em getFaturamentoDia: " + erro.toString());
+    return {
+      sucesso: false,
+      timestamp: null,
+      dados: [],
+      erro: erro.toString()
+    };
+  }
+}
+
+/**
+ * Retorna o último faturamento detectado (para exibir na webapp)
+ * Esta função NÃO recalcula, apenas retorna o que foi salvo
+ */
+function getUltimoFaturamento() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var ultimoFaturamento = props.getProperty('ULTIMO_FATURAMENTO');
+    var timestamp = props.getProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
+
+    if (!ultimoFaturamento) {
+      return {
+        sucesso: true,
+        timestamp: null,
+        dados: [],
+        mensagem: "Nenhum faturamento detectado ainda. Aguardando primeira verificação."
+      };
+    }
+
+    var dados = JSON.parse(ultimoFaturamento);
+
+    return {
+      sucesso: true,
+      timestamp: timestamp,
+      dados: dados
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro em getUltimoFaturamento: " + erro.toString());
     return {
       sucesso: false,
       timestamp: null,

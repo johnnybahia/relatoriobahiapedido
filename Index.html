@@ -434,33 +434,6 @@
         <p><strong>Total de Registros:</strong> <span id="printTotalRegistros"></span></p>
       </div>
 
-      <div class="filters-box">
-        <div class="filter-group">
-          <label>📅 Mês/Ano Entrega</label>
-          <select id="selMesEntrega" onchange="aplicarFiltros()"><option value="Todos">Todos</option></select>
-        </div>
-        <div class="filter-group">
-          <label>📆 Data de Entrega</label>
-          <select id="selDataEntrega" onchange="aplicarFiltros()"><option value="Todos">Todos</option></select>
-        </div>
-        <div class="filter-group">
-          <label>📆 Data Recebimento</label>
-          <select id="selDataRecebimento" onchange="aplicarFiltros()"><option value="Todos">Todos</option></select>
-        </div>
-        <div class="filter-group">
-          <label>🏢 Cliente</label>
-          <select id="selCliente" onchange="atualizarFunilCliente()"><option value="Todos">Todos</option></select>
-        </div>
-        <div class="filter-group">
-          <label>🏷️ Marca</label>
-          <select id="selMarca" onchange="aplicarFiltros()"><option value="Todos">Todas</option></select>
-        </div>
-        <div class="filter-group">
-          <label>📍 Local Entrega</label>
-          <select id="selLocal" onchange="aplicarFiltros()"><option value="Todos">Todos</option></select>
-        </div>
-      </div>
-
       <!-- SEÇÃO: ENTRADAS POR MARCA DO MÊS -->
       <div class="marcas-mes-container">
         <div class="marcas-header">
@@ -517,6 +490,34 @@
           <div class="card-body-faturamento" id="listaFaturamento">
             <div class="loading-faturamento">Carregando dados...</div>
           </div>
+        </div>
+      </div>
+
+      <!-- FILTROS -->
+      <div class="filters-box">
+        <div class="filter-group">
+          <label>📅 Mês/Ano Entrega</label>
+          <select id="selMesEntrega" onchange="aplicarFiltros()"><option value="Todos">Todos</option></select>
+        </div>
+        <div class="filter-group">
+          <label>📆 Data de Entrega</label>
+          <select id="selDataEntrega" onchange="aplicarFiltros()"><option value="Todos">Todos</option></select>
+        </div>
+        <div class="filter-group">
+          <label>📆 Data Recebimento</label>
+          <select id="selDataRecebimento" onchange="aplicarFiltros()"><option value="Todos">Todos</option></select>
+        </div>
+        <div class="filter-group">
+          <label>🏢 Cliente</label>
+          <select id="selCliente" onchange="atualizarFunilCliente()"><option value="Todos">Todos</option></select>
+        </div>
+        <div class="filter-group">
+          <label>🏷️ Marca</label>
+          <select id="selMarca" onchange="aplicarFiltros()"><option value="Todos">Todas</option></select>
+        </div>
+        <div class="filter-group">
+          <label>📍 Local Entrega</label>
+          <select id="selLocal" onchange="aplicarFiltros()"><option value="Todos">Todos</option></select>
         </div>
       </div>
 
@@ -1238,7 +1239,7 @@
           }
 
           if (resultado.timestamp) {
-            document.getElementById('timestampFaturamento').textContent = resultado.timestamp;
+            document.getElementById('timestampFaturamento').textContent = 'Último faturamento: ' + resultado.timestamp;
           } else {
             document.getElementById('timestampFaturamento').textContent = 'Aguardando primeira verificação';
           }
@@ -1279,7 +1280,7 @@
           document.getElementById('listaFaturamento').innerHTML =
             '<div class="empty-state-faturamento"><div class="empty-state-icon-faturamento">❌</div>Erro: ' + error.message + '</div>';
         })
-        .getFaturamentoDia();
+        .getUltimoFaturamento();
     }
 
     // ========================================
