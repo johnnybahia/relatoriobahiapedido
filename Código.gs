@@ -192,7 +192,7 @@ function lerDados1() {
 }
 
 /**
- * Cria um mapa de OC -> Marca carregando todas de uma vez (OTIMIZADO)
+ * Cria um mapa de OC -> Marca carregando TODAS as linhas de uma vez (OTIMIZADO)
  * @returns {Object} Mapa com OC como chave e marca como valor
  */
 function criarMapaOCMarca() {
@@ -209,14 +209,12 @@ function criarMapaOCMarca() {
       return {};
     }
 
-    Logger.log("📥 Carregando mapa OC->Marca das últimas 2000 linhas...");
-
-    // Carrega as últimas 2000 linhas (otimização)
-    var numLinhas = Math.min(2000, lastRow - 1);
-    var inicio = lastRow - numLinhas + 1;
+    // Carrega TODAS as linhas (sem limite)
+    var numLinhas = lastRow - 1;
+    Logger.log("📥 Carregando mapa OC->Marca de TODAS as " + numLinhas + " linhas...");
 
     // Pega apenas as colunas necessárias: Marca (E/5) e OC (J/10)
-    var dados = sheet.getRange(inicio, 1, numLinhas, 10).getValues();
+    var dados = sheet.getRange(2, 1, numLinhas, 10).getValues();
 
     var mapa = {};
     var contador = 0;
@@ -233,7 +231,7 @@ function criarMapaOCMarca() {
       }
     });
 
-    Logger.log("✅ Mapa criado com " + Object.keys(mapa).length + " OCs únicas");
+    Logger.log("✅ Mapa criado com " + Object.keys(mapa).length + " OCs únicas de " + numLinhas + " linhas");
     return mapa;
 
   } catch (erro) {
@@ -613,4 +611,37 @@ function testarLeituraDados1() {
   } else {
     Logger.log("⚠️ Aba vazia (sem dados além do cabeçalho)");
   }
+}
+
+/**
+ * Verifica o tamanho das abas Dados e Dados1
+ */
+function verificarTamanhoAbas() {
+  Logger.log("📊 Verificando tamanho das abas...");
+  Logger.log("=".repeat(50));
+
+  // Verifica aba Dados
+  var sheetDados = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados");
+  if (sheetDados) {
+    var totalDados = sheetDados.getLastRow();
+    Logger.log("📌 Aba DADOS:");
+    Logger.log("   Total de linhas: " + totalDados);
+    Logger.log("   Linhas com dados: " + (totalDados - 1));
+  } else {
+    Logger.log("❌ Aba 'Dados' não encontrada!");
+  }
+
+  // Verifica aba Dados1
+  var sheetDados1 = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados1");
+  if (sheetDados1) {
+    var totalDados1 = sheetDados1.getLastRow();
+    Logger.log("\n📌 Aba DADOS1:");
+    Logger.log("   Total de linhas: " + totalDados1);
+    Logger.log("   Linhas com dados: " + (totalDados1 - 1));
+  } else {
+    Logger.log("\n❌ Aba 'Dados1' não encontrada!");
+  }
+
+  Logger.log("\n" + "=".repeat(50));
+  Logger.log("✅ Verificação concluída!");
 }
