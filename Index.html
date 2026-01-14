@@ -44,6 +44,42 @@
     .kpi-value { font-size: 28px; font-weight: 700; color: #2c3e50; margin-top: 10px; }
     .kpi-sub { font-size: 12px; color: #999; margin-top: 5px; }
 
+    /* CARDS DE KPI MENORES (NO FINAL) */
+    .kpi-row-small {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+      margin-top: 20px;
+    }
+    .kpi-card-small {
+      background: white;
+      border-radius: 6px;
+      padding: 12px 15px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      border-left: 4px solid var(--primary-color);
+      transition: transform 0.2s;
+    }
+    .kpi-card-small:hover { transform: translateY(-2px); }
+    .kpi-title-small {
+      font-size: 11px;
+      color: #7f8c8d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    .kpi-value-small {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-top: 6px;
+    }
+    .kpi-sub-small {
+      font-size: 10px;
+      color: #999;
+      margin-top: 3px;
+    }
+
     /* FILTROS (FUNIL) */
     .filters-box {
       background: white; padding: 20px; border-radius: 8px; box-shadow: var(--card-shadow);
@@ -425,10 +461,10 @@
         </div>
       </div>
 
-      <!-- SEÇÃO: TOTAIS POR MARCA DO MÊS -->
+      <!-- SEÇÃO: ENTRADAS POR MARCA DO MÊS -->
       <div class="marcas-mes-container">
         <div class="marcas-header">
-          <div class="marcas-title">📊 Totais por Marca</div>
+          <div class="marcas-title">📊 Entradas por Marca</div>
           <div class="marcas-filter">
             <label>🗓️ Mês de Entrega:</label>
             <select id="selMesMarcas" onchange="atualizarTotaisPorMarca()">
@@ -484,24 +520,6 @@
         </div>
       </div>
 
-      <div class="kpi-row">
-        <div class="kpi-card" style="border-left-color: #27ae60;">
-          <div class="kpi-title">Faturamento Total</div>
-          <div class="kpi-value" id="kpiValor">R$ 0,00</div>
-          <div class="kpi-sub">Soma dos pedidos filtrados</div>
-        </div>
-        <div class="kpi-card" style="border-left-color: #2980b9;">
-          <div class="kpi-title">Total em Pares</div>
-          <div class="kpi-value" id="kpiPares">0</div>
-          <div class="kpi-sub">Unidades tipo PAR</div>
-        </div>
-        <div class="kpi-card" style="border-left-color: #e67e22;">
-          <div class="kpi-title">Total em Metros</div>
-          <div class="kpi-value" id="kpiMetros">0</div>
-          <div class="kpi-sub">Unidades tipo METRO</div>
-        </div>
-      </div>
-
       <div class="table-container">
         <table>
           <thead>
@@ -522,6 +540,25 @@
         </table>
         <div class="no-print" style="padding: 15px; text-align: center; color: #888; font-size: 12px; border-top: 1px solid #eee;">
           Mostrando os últimos 50 registros filtrados. Use "Imprimir Relatório" para ver todos os dados.
+        </div>
+      </div>
+
+      <!-- CARDS KPI (MENORES) -->
+      <div class="kpi-row-small">
+        <div class="kpi-card-small" style="border-left-color: #27ae60;">
+          <div class="kpi-title-small">Entradas Totais</div>
+          <div class="kpi-value-small" id="kpiValor">R$ 0,00</div>
+          <div class="kpi-sub-small">Soma dos pedidos filtrados</div>
+        </div>
+        <div class="kpi-card-small" style="border-left-color: #2980b9;">
+          <div class="kpi-title-small">Total em Pares</div>
+          <div class="kpi-value-small" id="kpiPares">0</div>
+          <div class="kpi-sub-small">Unidades tipo PAR</div>
+        </div>
+        <div class="kpi-card-small" style="border-left-color: #e67e22;">
+          <div class="kpi-title-small">Total em Metros</div>
+          <div class="kpi-value-small" id="kpiMetros">0</div>
+          <div class="kpi-sub-small">Unidades tipo METRO</div>
         </div>
       </div>
 
