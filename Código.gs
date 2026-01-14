@@ -485,3 +485,88 @@ function setupTriggers() {
   Logger.log("✅ Triggers configurados com sucesso!");
   Logger.log("⏰ Verificações automáticas às 8h e 19h todos os dias");
 }
+
+// ========================================
+// FUNÇÕES DE TESTE E DEBUG
+// ========================================
+
+/**
+ * FUNÇÃO DE TESTE - Execute esta para verificar se está funcionando
+ */
+function testarPedidosAFaturar() {
+  Logger.log("🧪 Iniciando teste completo...");
+  Logger.log("=".repeat(50));
+
+  // 1. Testa leitura da aba Dados1
+  Logger.log("\n📋 Passo 1: Testando leitura da aba Dados1...");
+  var dados = lerDados1();
+  Logger.log("   Registros encontrados: " + dados.length);
+
+  if (dados.length > 0) {
+    Logger.log("   Exemplo do primeiro registro:");
+    Logger.log("   - OC: " + dados[0].ordemCompra);
+    Logger.log("   - Valor: " + dados[0].valor);
+    Logger.log("   - Cliente: " + dados[0].cliente);
+  } else {
+    Logger.log("   ⚠️ PROBLEMA: Nenhum dado encontrado na aba Dados1!");
+    return;
+  }
+
+  // 2. Testa busca de marca
+  Logger.log("\n🔍 Passo 2: Testando busca de marca...");
+  var ocTeste = dados[0].ordemCompra;
+  Logger.log("   Buscando marca para OC: " + ocTeste);
+  var marca = buscarMarcaPorOC(ocTeste);
+  Logger.log("   Marca encontrada: " + marca);
+
+  // 3. Testa função completa
+  Logger.log("\n💼 Passo 3: Testando getPedidosAFaturar()...");
+  var resultado = getPedidosAFaturar();
+  Logger.log("   Sucesso: " + resultado.sucesso);
+  Logger.log("   Timestamp: " + resultado.timestamp);
+  Logger.log("   Linhas retornadas: " + resultado.dados.length);
+
+  if (resultado.dados.length > 0) {
+    Logger.log("\n   📊 Resultado final:");
+    resultado.dados.forEach(function(item, index) {
+      Logger.log("   " + (index + 1) + ". " + item.cliente + " | " + item.marca + " | R$ " + item.valor.toFixed(2));
+    });
+  }
+
+  // 4. Retorna resultado formatado em JSON
+  Logger.log("\n=".repeat(50));
+  Logger.log("✅ Teste concluído!");
+  Logger.log("\n📤 JSON que será enviado para o frontend:");
+  Logger.log(JSON.stringify(resultado, null, 2));
+
+  return resultado;
+}
+
+/**
+ * Teste simples apenas da leitura de Dados1
+ */
+function testarLeituraDados1() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados1");
+
+  if (!sheet) {
+    Logger.log("❌ Aba 'Dados1' NÃO EXISTE!");
+    Logger.log("Abas disponíveis na planilha:");
+    SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function(s) {
+      Logger.log("  - " + s.getName());
+    });
+    return;
+  }
+
+  Logger.log("✅ Aba 'Dados1' encontrada!");
+  Logger.log("Última linha: " + sheet.getLastRow());
+
+  if (sheet.getLastRow() >= 2) {
+    var dados = sheet.getRange(2, 1, Math.min(5, sheet.getLastRow() - 1), 3).getValues();
+    Logger.log("\nPrimeiras " + dados.length + " linhas:");
+    dados.forEach(function(row, i) {
+      Logger.log("  Linha " + (i + 2) + ": OC=" + row[0] + " | Valor=" + row[1] + " | Cliente=" + row[2]);
+    });
+  } else {
+    Logger.log("⚠️ Aba vazia (sem dados além do cabeçalho)");
+  }
+}
