@@ -31,7 +31,59 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('🏭 Relatórios')
       .addItem('🖨️ Imprimir Relatório por OC(s)', 'mostrarDialogoOCs')
+      .addSeparator()
+      .addItem('🔧 Testar Macro (Debug)', 'testarMacroDebug')
+      .addSeparator()
+      .addSubMenu(ui.createMenu('💰 Faturamento')
+          .addItem('🔄 Atualizar Faturamento Agora', 'atualizarFaturamentoManual')
+          .addItem('⚙️ Configurar Triggers Automáticos (8h e 19h)', 'criarTriggersAutomaticos')
+          .addItem('🧹 Limpar Faturamento do Dia', 'limparFaturamentoDia'))
       .addToUi();
+}
+
+/**
+ * Função de teste para debug - teste rápido com uma OC
+ */
+function testarMacroDebug() {
+  const ui = SpreadsheetApp.getUi();
+  const result = ui.prompt(
+    'Teste de Debug',
+    'Digite uma OC para teste:',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (result.getSelectedButton() == ui.Button.CANCEL) {
+    return;
+  }
+
+  const ocTeste = result.getResponseText().trim();
+  if (!ocTeste) {
+    ui.alert('Por favor, digite uma OC válida.');
+    return;
+  }
+
+  console.log('=== INÍCIO DO TESTE DE DEBUG ===');
+  console.log('OC para teste:', ocTeste);
+
+  try {
+    const resultado = processarMultiplasOCs([ocTeste]);
+    console.log('=== RESULTADO DO TESTE ===');
+    console.log('Success:', resultado.success);
+    console.log('Message:', resultado.message);
+
+    if (resultado.success) {
+      ui.alert('✅ Teste concluído com sucesso!\n\n' + resultado.message + '\n\nVerifique o log de execuções (Ctrl+Enter) para mais detalhes.');
+    } else {
+      ui.alert('❌ Teste falhou!\n\n' + resultado.message + '\n\nVerifique o log de execuções (Ctrl+Enter) para mais detalhes.');
+    }
+  } catch (error) {
+    console.error('=== ERRO NO TESTE ===');
+    console.error(error.toString());
+    console.error(error.stack);
+    ui.alert('❌ Erro no teste:\n\n' + error.message + '\n\nVerifique o log de execuções (Ctrl+Enter) para detalhes completos.');
+  }
+
+  console.log('=== FIM DO TESTE DE DEBUG ===');
 }
 
 /**
@@ -244,33 +296,68 @@ function mostrarDialogoOCs() {
  */
 function processarMultiplasOCs(ocs) {
   try {
+    console.log('Iniciando processarMultiplasOCs com', ocs.length, 'OCs');
+
     if (!ocs || ocs.length === 0) {
+      console.log('Erro: Nenhuma OC fornecida');
       return { success: false, message: 'Nenhuma OC fornecida' };
     }
 
+    console.log('OCs recebidas:', ocs.join(', '));
+
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getActiveSheet();
+    console.log('Planilha ativa:', sheet.getName());
 
     // Otimização: lê dados uma única vez
+    console.log('Lendo dados da planilha...');
     const dadosCache = lerDadosOtimizado(sheet, ss);
 
     if (!dadosCache.success) {
+      console.log('Erro ao ler dados:', dadosCache.message);
       return { success: false, message: dadosCache.message };
     }
 
+    console.log('Dados lidos com sucesso. Total de linhas:', dadosCache.dados.length);
+
     // Gera relatório para as OCs
+    console.log('Gerando HTML do relatório...');
     const resultado = gerarRelatorioMultiplasOCs(ocs, dadosCache);
 
     if (!resultado || !resultado.html) {
+      console.log('Erro: Nenhum item encontrado para as OCs fornecidas');
       return { success: false, message: 'Nenhum item encontrado para as OCs fornecidas' };
     }
 
-    // Mostra o relatório
-    const output = HtmlService.createHtmlOutput(resultado.html)
-      .setWidth(1200)
-      .setHeight(700);
+    console.log('OCs encontradas:', resultado.ocsEncontradas.length);
+    console.log('OCs não encontradas:', resultado.ocsNaoEncontradas.length);
+    console.log('Tamanho do HTML gerado:', resultado.html.length, 'caracteres');
 
-    SpreadsheetApp.getUi().showModalDialog(output, 'Relatório de Produção');
+    // Verifica se o HTML não é muito grande (limite do Google Apps Script)
+    if (resultado.html.length > 1000000) {
+      console.log('AVISO: HTML muito grande, pode causar problemas');
+      return {
+        success: false,
+        message: 'Relatório muito grande. Tente gerar menos OCs por vez (máximo 5-10).'
+      };
+    }
+
+    // Mostra o relatório
+    console.log('Criando janela do relatório...');
+    try {
+      const output = HtmlService.createHtmlOutput(resultado.html)
+        .setWidth(1200)
+        .setHeight(700);
+
+      SpreadsheetApp.getUi().showModalDialog(output, 'Relatório de Produção');
+      console.log('Janela do relatório criada com sucesso');
+    } catch (e) {
+      console.error('Erro ao criar janela do relatório:', e.toString());
+      return {
+        success: false,
+        message: 'Erro ao exibir relatório: ' + e.message + '. Tente gerar menos OCs por vez.'
+      };
+    }
 
     // Monta mensagem com informações sobre OCs encontradas e não encontradas
     let msg = '';
@@ -282,10 +369,16 @@ function processarMultiplasOCs(ocs) {
       msg = `Relatórios gerados para ${resultado.ocsEncontradas.length} OC(s). ⚠️ ${resultado.ocsNaoEncontradas.length} OC(s) não encontrada(s).`;
     }
 
+    console.log('Processo concluído com sucesso:', msg);
     return { success: true, message: msg };
 
   } catch (error) {
-    return { success: false, message: error.toString() };
+    console.error('ERRO em processarMultiplasOCs:', error.toString());
+    console.error('Stack trace:', error.stack);
+    return {
+      success: false,
+      message: 'Erro ao processar: ' + error.message + '. Verifique o log de execuções (Ctrl+Enter).'
+    };
   }
 }
 
@@ -294,19 +387,26 @@ function processarMultiplasOCs(ocs) {
  */
 function lerDadosOtimizado(sheet, ss) {
   try {
+    console.log('lerDadosOtimizado: Iniciando...');
+
     // Otimização: usa getRange específico ao invés de getDataRange
     const lastRow = sheet.getLastRow();
     const lastCol = sheet.getLastColumn();
+    console.log(`lerDadosOtimizado: lastRow=${lastRow}, lastCol=${lastCol}`);
 
     if (lastRow < 3) {
+      console.log('lerDadosOtimizado: Erro - Planilha sem dados suficientes');
       return { success: false, message: 'Planilha sem dados suficientes' };
     }
 
     // Lê apenas até a última linha com dados (não toda a planilha)
+    console.log('lerDadosOtimizado: Lendo range da planilha...');
     const dados = sheet.getRange(1, 1, lastRow, lastCol).getDisplayValues();
+    console.log(`lerDadosOtimizado: ${dados.length} linhas lidas`);
 
     const INDICE_CABECALHO = 2;
     const cabecalho = dados[INDICE_CABECALHO].map(c => String(c).trim().toUpperCase());
+    console.log('lerDadosOtimizado: Cabeçalhos:', cabecalho.slice(0, 5).join(', '), '...');
 
     // Mapear índices
     const mapa = {};
@@ -317,6 +417,7 @@ function lerDadosOtimizado(sheet, ss) {
       }
       mapa[key] = index;
     }
+    console.log('lerDadosOtimizado: Mapa de colunas criado');
 
     // Verificação de QTD ABERTA
     if (mapa.QTD_ABERTA === -1) {
@@ -330,10 +431,12 @@ function lerDadosOtimizado(sheet, ss) {
     }
 
     // Buscar marcas na aba MARCAS
+    console.log('lerDadosOtimizado: Buscando aba MARCAS...');
     const sheetMarcas = ss.getSheetByName(ABA_MARCAS_NOME);
     let marcasMap = {};
 
     if (sheetMarcas) {
+      console.log('lerDadosOtimizado: Aba MARCAS encontrada, lendo dados...');
       const dadosMarcas = sheetMarcas.getDataRange().getValues();
       const headerMarcas = dadosMarcas[0].map(c => String(c).toUpperCase().trim());
 
@@ -349,8 +452,12 @@ function lerDadosOtimizado(sheet, ss) {
         const marca = dadosMarcas[i][colIndexNomeMarca];
         if (oc) marcasMap[oc] = marca;
       }
+      console.log(`lerDadosOtimizado: ${Object.keys(marcasMap).length} marcas carregadas`);
+    } else {
+      console.log('lerDadosOtimizado: Aba MARCAS não encontrada');
     }
 
+    console.log('lerDadosOtimizado: Concluído com sucesso');
     return {
       success: true,
       dados: dados,
@@ -360,6 +467,8 @@ function lerDadosOtimizado(sheet, ss) {
     };
 
   } catch (error) {
+    console.error('lerDadosOtimizado: ERRO -', error.toString());
+    console.error('lerDadosOtimizado: Stack -', error.stack);
     return { success: false, message: 'Erro ao ler dados: ' + error.toString() };
   }
 }
@@ -368,48 +477,68 @@ function lerDadosOtimizado(sheet, ss) {
  * Gera HTML do relatório para múltiplas OCs
  */
 function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
-  const { dados, mapa, marcasMap, INDICE_CABECALHO } = dadosCache;
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const dataHoje = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "dd/MM/yyyy HH:mm");
+  try {
+    console.log('gerarRelatorioMultiplasOCs: Iniciando...');
+    console.log('gerarRelatorioMultiplasOCs: OCs a processar:', ocs.join(', '));
 
-  // Agrupa itens por OC
-  const itensPorOC = {};
-  const clientesPorOC = {};
+    const { dados, mapa, marcasMap, INDICE_CABECALHO } = dadosCache;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const dataHoje = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "dd/MM/yyyy HH:mm");
 
-  for (let i = INDICE_CABECALHO + 1; i < dados.length; i++) {
-    const linha = dados[i];
-    if (linha.length <= mapa.ORDEM_COMPRA) continue;
+    // Agrupa itens por OC
+    console.log('gerarRelatorioMultiplasOCs: Agrupando itens por OC...');
+    const itensPorOC = {};
+    const clientesPorOC = {};
 
-    const ocLinha = String(linha[mapa.ORDEM_COMPRA]).trim();
+    let linhasProcessadas = 0;
+    for (let i = INDICE_CABECALHO + 1; i < dados.length; i++) {
+      const linha = dados[i];
+      if (linha.length <= mapa.ORDEM_COMPRA) continue;
 
-    if (ocs.includes(ocLinha)) {
-      if (!itensPorOC[ocLinha]) {
-        itensPorOC[ocLinha] = [];
-        clientesPorOC[ocLinha] = mapa.CLIENTE > -1 ? linha[mapa.CLIENTE] : "";
+      const ocLinha = String(linha[mapa.ORDEM_COMPRA]).trim();
+
+      if (ocs.includes(ocLinha)) {
+        if (!itensPorOC[ocLinha]) {
+          itensPorOC[ocLinha] = [];
+          clientesPorOC[ocLinha] = mapa.CLIENTE > -1 ? linha[mapa.CLIENTE] : "";
+          console.log(`gerarRelatorioMultiplasOCs: OC ${ocLinha} encontrada`);
+        }
+
+        itensPorOC[ocLinha].push({
+          pedido: mapa.PEDIDO > -1 ? linha[mapa.PEDIDO] : "",
+          codCliente: mapa.COD_CLIENTE > -1 ? linha[mapa.COD_CLIENTE] : "",
+          codMarfim: mapa.COD_MARFIM > -1 ? linha[mapa.COD_MARFIM] : "",
+          descricao: mapa.DESCRICAO > -1 ? linha[mapa.DESCRICAO] : "",
+          tamanho: mapa.TAMANHO > -1 ? linha[mapa.TAMANHO] : "",
+          qtdAberta: mapa.QTD_ABERTA > -1 ? linha[mapa.QTD_ABERTA] : "",
+          lotes: mapa.LOTES > -1 ? linha[mapa.LOTES] : "",
+          codOs: mapa.CODIGO_OS > -1 ? linha[mapa.CODIGO_OS] : "",
+          dtRec: mapa.DT_RECEBIMENTO > -1 ? linha[mapa.DT_RECEBIMENTO] : "",
+          dtEnt: mapa.DT_ENTREGA > -1 ? linha[mapa.DT_ENTREGA] : "",
+          prazo: mapa.PRAZO > -1 ? linha[mapa.PRAZO] : ""
+        });
+        linhasProcessadas++;
       }
-
-      itensPorOC[ocLinha].push({
-        pedido: mapa.PEDIDO > -1 ? linha[mapa.PEDIDO] : "",
-        codCliente: mapa.COD_CLIENTE > -1 ? linha[mapa.COD_CLIENTE] : "",
-        codMarfim: mapa.COD_MARFIM > -1 ? linha[mapa.COD_MARFIM] : "",
-        descricao: mapa.DESCRICAO > -1 ? linha[mapa.DESCRICAO] : "",
-        tamanho: mapa.TAMANHO > -1 ? linha[mapa.TAMANHO] : "",
-        qtdAberta: mapa.QTD_ABERTA > -1 ? linha[mapa.QTD_ABERTA] : "",
-        lotes: mapa.LOTES > -1 ? linha[mapa.LOTES] : "",
-        codOs: mapa.CODIGO_OS > -1 ? linha[mapa.CODIGO_OS] : "",
-        dtRec: mapa.DT_RECEBIMENTO > -1 ? linha[mapa.DT_RECEBIMENTO] : "",
-        dtEnt: mapa.DT_ENTREGA > -1 ? linha[mapa.DT_ENTREGA] : "",
-        prazo: mapa.PRAZO > -1 ? linha[mapa.PRAZO] : ""
-      });
     }
-  }
 
-  // Verifica quais OCs foram encontradas e quais não
-  const ocsEncontradas = Object.keys(itensPorOC);
-  const ocsNaoEncontradas = ocs.filter(oc => !ocsEncontradas.includes(oc));
+    console.log(`gerarRelatorioMultiplasOCs: ${linhasProcessadas} itens encontrados`);
 
-  if (ocsEncontradas.length === 0) {
-    return { html: null, ocsEncontradas: [], ocsNaoEncontradas: ocsNaoEncontradas };
+    // Verifica quais OCs foram encontradas e quais não
+    const ocsEncontradas = Object.keys(itensPorOC);
+    const ocsNaoEncontradas = ocs.filter(oc => !ocsEncontradas.includes(oc));
+
+    console.log('gerarRelatorioMultiplasOCs: OCs encontradas:', ocsEncontradas.join(', '));
+    console.log('gerarRelatorioMultiplasOCs: OCs não encontradas:', ocsNaoEncontradas.join(', '));
+
+    if (ocsEncontradas.length === 0) {
+      console.log('gerarRelatorioMultiplasOCs: Nenhuma OC encontrada!');
+      return { html: null, ocsEncontradas: [], ocsNaoEncontradas: ocsNaoEncontradas };
+    }
+
+    console.log('gerarRelatorioMultiplasOCs: Gerando HTML...');
+  } catch (error) {
+    console.error('gerarRelatorioMultiplasOCs: ERRO ao processar dados -', error.toString());
+    throw error;
   }
 
   // Gera HTML com LOGO e destaque da OC - OTIMIZADO PARA LASER P&B VERTICAL
@@ -688,6 +817,9 @@ function gerarRelatorioMultiplasOCs(ocs, dadosCache) {
     </body>
     </html>
   `;
+
+  console.log('gerarRelatorioMultiplasOCs: HTML gerado com sucesso!');
+  console.log(`gerarRelatorioMultiplasOCs: Tamanho total: ${html.length} caracteres`);
 
   return {
     html: html,
@@ -1197,6 +1329,362 @@ function fetchAllData(cacheBuster) {
       error: 'fetchAllData: ' + err.message 
     };
   }
+}
+
+// ====== SISTEMA DE FATURAMENTO ======
+
+/**
+ * Lê dados da aba "Dados1" (Ordem de Compra, Valor, Cliente)
+ */
+function lerDados1() {
+  try {
+    const ss = _openSS_();
+    const sheet = ss.getSheetByName('Dados1');
+
+    if (!sheet) {
+      console.error('Aba Dados1 não encontrada');
+      return { success: false, error: 'Aba Dados1 não encontrada' };
+    }
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return { success: true, dados: [] };
+    }
+
+    const range = sheet.getRange(2, 1, lastRow - 1, 3);
+    const values = range.getValues();
+
+    const dados = [];
+    for (let i = 0; i < values.length; i++) {
+      const oc = String(values[i][0]).trim();
+      const valor = _toNumber_(values[i][1]);
+      const cliente = String(values[i][2]).trim();
+
+      if (oc && cliente) {
+        dados.push({ oc, valor, cliente });
+      }
+    }
+
+    console.log(`lerDados1: ${dados.length} registros lidos`);
+    return { success: true, dados };
+
+  } catch (error) {
+    console.error('Erro em lerDados1:', error);
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * Salva snapshot dos dados atuais para comparação futura
+ */
+function salvarSnapshot() {
+  try {
+    console.log('Salvando snapshot dos dados...');
+    const resultado = lerDados1();
+
+    if (!resultado.success) {
+      console.error('Erro ao ler dados para snapshot:', resultado.error);
+      return;
+    }
+
+    const props = PropertiesService.getScriptProperties();
+    const now = new Date();
+    const timestamp = Utilities.formatDate(now, TZ, 'dd/MM/yyyy HH:mm:ss');
+
+    props.setProperty('SNAPSHOT_DADOS', JSON.stringify(resultado.dados));
+    props.setProperty('SNAPSHOT_TIMESTAMP', timestamp);
+
+    console.log(`Snapshot salvo: ${resultado.dados.length} registros em ${timestamp}`);
+
+  } catch (error) {
+    console.error('Erro ao salvar snapshot:', error);
+  }
+}
+
+/**
+ * Detecta faturamento comparando dados atuais com snapshot anterior
+ */
+function detectarFaturamento() {
+  try {
+    console.log('Detectando faturamento...');
+    const props = PropertiesService.getScriptProperties();
+
+    // Lê snapshot anterior
+    const snapshotJson = props.getProperty('SNAPSHOT_DADOS');
+    if (!snapshotJson) {
+      console.log('Nenhum snapshot anterior encontrado. Salvando primeiro snapshot...');
+      salvarSnapshot();
+      return { faturados: [], timestamp: null };
+    }
+
+    const dadosAntigos = JSON.parse(snapshotJson);
+    const timestampAnterior = props.getProperty('SNAPSHOT_TIMESTAMP');
+
+    // Lê dados atuais
+    const resultado = lerDados1();
+    if (!resultado.success) {
+      console.error('Erro ao ler dados atuais');
+      return { faturados: [], timestamp: timestampAnterior };
+    }
+
+    const dadosAtuais = resultado.dados;
+
+    // Cria mapa dos dados atuais por OC
+    const mapaAtual = {};
+    dadosAtuais.forEach(d => {
+      mapaAtual[d.oc] = d;
+    });
+
+    // Detecta faturamento
+    const faturados = [];
+
+    dadosAntigos.forEach(dadoAntigo => {
+      const dadoAtual = mapaAtual[dadoAntigo.oc];
+
+      if (!dadoAtual) {
+        // OC sumiu = foi totalmente faturada
+        faturados.push({
+          oc: dadoAntigo.oc,
+          cliente: dadoAntigo.cliente,
+          valorFaturado: dadoAntigo.valor
+        });
+        console.log(`OC ${dadoAntigo.oc} foi faturada (sumiu): R$ ${dadoAntigo.valor}`);
+
+      } else if (dadoAtual.valor < dadoAntigo.valor) {
+        // Valor diminuiu = faturamento parcial
+        const valorFaturado = dadoAntigo.valor - dadoAtual.valor;
+        faturados.push({
+          oc: dadoAntigo.oc,
+          cliente: dadoAntigo.cliente,
+          valorFaturado: valorFaturado
+        });
+        console.log(`OC ${dadoAntigo.oc} faturamento parcial: R$ ${valorFaturado}`);
+      }
+    });
+
+    console.log(`Total de faturamentos detectados: ${faturados.length}`);
+
+    // Salva faturamento detectado
+    if (faturados.length > 0) {
+      const faturamentoAtual = props.getProperty('FATURAMENTO_DIA');
+      const faturamentoDia = faturamentoAtual ? JSON.parse(faturamentoAtual) : [];
+
+      faturados.forEach(f => faturamentoDia.push(f));
+
+      props.setProperty('FATURAMENTO_DIA', JSON.stringify(faturamentoDia));
+    }
+
+    // Salva novo snapshot
+    salvarSnapshot();
+
+    return { faturados, timestamp: timestampAnterior };
+
+  } catch (error) {
+    console.error('Erro ao detectar faturamento:', error);
+    return { faturados: [], timestamp: null };
+  }
+}
+
+/**
+ * Limpa faturamento do dia (executar no início do dia)
+ */
+function limparFaturamentoDia() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    props.setProperty('FATURAMENTO_DIA', JSON.stringify([]));
+    console.log('Faturamento do dia limpo');
+  } catch (error) {
+    console.error('Erro ao limpar faturamento:', error);
+  }
+}
+
+/**
+ * Função manual para atualizar faturamento
+ */
+function atualizarFaturamentoManual() {
+  console.log('=== ATUALIZAÇÃO MANUAL DE FATURAMENTO ===');
+  const resultado = detectarFaturamento();
+  console.log(`Faturamentos detectados: ${resultado.faturados.length}`);
+  console.log('=== FIM DA ATUALIZAÇÃO ===');
+
+  const ui = SpreadsheetApp.getUi();
+  if (resultado.faturados.length > 0) {
+    ui.alert(`✅ Faturamento atualizado!\n\n${resultado.faturados.length} movimentação(ões) detectada(s).`);
+  } else {
+    ui.alert('ℹ️ Nenhuma mudança detectada desde a última verificação.');
+  }
+}
+
+/**
+ * Processa dados para o card "Pedidos a Faturar"
+ */
+function getPedidosAFaturar() {
+  try {
+    const resultado = lerDados1();
+    if (!resultado.success || resultado.dados.length === 0) {
+      return {
+        sucesso: true,
+        dados: [],
+        timestamp: Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm:ss')
+      };
+    }
+
+    const ss = _openSS_();
+    const sheetMarcas = ss.getSheetByName(ABA_MARCAS_NOME);
+    const marcasMap = {};
+
+    if (sheetMarcas) {
+      const dadosMarcas = sheetMarcas.getDataRange().getValues();
+      for (let i = 1; i < dadosMarcas.length; i++) {
+        const oc = String(dadosMarcas[i][0]).trim();
+        const marca = dadosMarcas[i][1];
+        if (oc) marcasMap[oc] = marca;
+      }
+    }
+
+    // Agrupa por cliente
+    const porCliente = {};
+
+    resultado.dados.forEach(item => {
+      const marca = marcasMap[item.oc] || 'N/A';
+      const chave = `${item.cliente}|${marca}`;
+
+      if (!porCliente[chave]) {
+        porCliente[chave] = {
+          cliente: item.cliente,
+          marca: marca,
+          valor: 0
+        };
+      }
+
+      porCliente[chave].valor += item.valor;
+    });
+
+    const dados = Object.values(porCliente).sort((a, b) => b.valor - a.valor);
+
+    return {
+      sucesso: true,
+      dados: dados,
+      timestamp: Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm:ss')
+    };
+
+  } catch (error) {
+    console.error('Erro em getPedidosAFaturar:', error);
+    return { sucesso: false, erro: error.toString() };
+  }
+}
+
+/**
+ * Processa dados para o card "Faturamento do Dia"
+ */
+function getFaturamentoDia() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const faturamentoJson = props.getProperty('FATURAMENTO_DIA');
+
+    if (!faturamentoJson) {
+      return {
+        sucesso: true,
+        dados: [],
+        timestamp: null
+      };
+    }
+
+    const faturados = JSON.parse(faturamentoJson);
+
+    if (faturados.length === 0) {
+      return {
+        sucesso: true,
+        dados: [],
+        timestamp: props.getProperty('SNAPSHOT_TIMESTAMP')
+      };
+    }
+
+    const ss = _openSS_();
+    const sheetMarcas = ss.getSheetByName(ABA_MARCAS_NOME);
+    const marcasMap = {};
+
+    if (sheetMarcas) {
+      const dadosMarcas = sheetMarcas.getDataRange().getValues();
+      for (let i = 1; i < dadosMarcas.length; i++) {
+        const oc = String(dadosMarcas[i][0]).trim();
+        const marca = dadosMarcas[i][1];
+        if (oc) marcasMap[oc] = marca;
+      }
+    }
+
+    // Agrupa por cliente e marca
+    const porCliente = {};
+
+    faturados.forEach(item => {
+      const marca = marcasMap[item.oc] || 'N/A';
+      const chave = `${item.cliente}|${marca}`;
+
+      if (!porCliente[chave]) {
+        porCliente[chave] = {
+          cliente: item.cliente,
+          marca: marca,
+          valor: 0
+        };
+      }
+
+      porCliente[chave].valor += item.valorFaturado;
+    });
+
+    const dados = Object.values(porCliente).sort((a, b) => b.valor - a.valor);
+
+    return {
+      sucesso: true,
+      dados: dados,
+      timestamp: props.getProperty('SNAPSHOT_TIMESTAMP')
+    };
+
+  } catch (error) {
+    console.error('Erro em getFaturamentoDia:', error);
+    return { sucesso: false, erro: error.toString() };
+  }
+}
+
+/**
+ * Cria triggers automáticos para 8h e 19h
+ */
+function criarTriggersAutomaticos() {
+  // Remove triggers antigos primeiro
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'detectarFaturamento' ||
+        trigger.getHandlerFunction() === 'limparFaturamentoDia') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  // Trigger às 8h (limpa e detecta)
+  ScriptApp.newTrigger('limparFaturamentoDia')
+    .timeBased()
+    .atHour(8)
+    .everyDays(1)
+    .create();
+
+  ScriptApp.newTrigger('detectarFaturamento')
+    .timeBased()
+    .atHour(8)
+    .everyDays(1)
+    .create();
+
+  // Trigger às 19h (detecta)
+  ScriptApp.newTrigger('detectarFaturamento')
+    .timeBased()
+    .atHour(19)
+    .everyDays(1)
+    .create();
+
+  console.log('Triggers automáticos criados: 8h (limpa + detecta) e 19h (detecta)');
+
+  const ui = SpreadsheetApp.getUi();
+  ui.alert('✅ Triggers automáticos configurados!\n\n' +
+           '• 8h da manhã: Limpa faturamento anterior e inicia novo monitoramento\n' +
+           '• 19h da noite: Detecta faturamento do dia\n\n' +
+           'O sistema agora irá monitorar automaticamente.');
 }
 
 // ====== CONTADOR DE ACESSOS (sem alteração) ======
