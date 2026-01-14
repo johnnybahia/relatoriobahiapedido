@@ -231,7 +231,7 @@ function buscarMarcaPorOC(oc) {
 
 /**
  * Retorna pedidos a faturar (card 1)
- * Agrupa por cliente, soma valores e busca marcas
+ * Agrupa por cliente+marca, soma valores
  */
 function getPedidosAFaturar() {
   try {
@@ -247,48 +247,39 @@ function getPedidosAFaturar() {
       };
     }
 
-    // Agrupa por cliente
-    var clientesMap = {};
+    // Agrupa por cliente+marca
+    var agrupamentoMap = {};
 
     dados.forEach(function(item) {
-      var cliente = item.cliente;
+      // Busca a marca pela OC
+      var marca = buscarMarcaPorOC(item.ordemCompra);
+      var chave = item.cliente + "|" + marca;
 
-      if (!clientesMap[cliente]) {
-        clientesMap[cliente] = {
-          valor: 0,
-          ocs: []
+      if (!agrupamentoMap[chave]) {
+        agrupamentoMap[chave] = {
+          cliente: item.cliente,
+          marca: marca,
+          valor: 0
         };
       }
 
-      clientesMap[cliente].valor += item.valor;
-      clientesMap[cliente].ocs.push(item.ordemCompra);
+      agrupamentoMap[chave].valor += item.valor;
     });
 
-    // Converte para array e busca marcas
-    var resultado = [];
-
-    Object.keys(clientesMap).forEach(function(cliente) {
-      var info = clientesMap[cliente];
-
-      // Busca a marca da primeira OC desse cliente
-      var marca = "Sem Marca";
-      if (info.ocs.length > 0) {
-        marca = buscarMarcaPorOC(info.ocs[0]);
-      }
-
-      resultado.push({
-        cliente: cliente,
-        valor: info.valor,
-        marca: marca
-      });
+    // Converte para array
+    var resultado = Object.keys(agrupamentoMap).map(function(chave) {
+      return agrupamentoMap[chave];
     });
 
-    // Ordena por valor (maior primeiro)
+    // Ordena por cliente (alfabético) e depois por valor (maior primeiro)
     resultado.sort(function(a, b) {
+      if (a.cliente !== b.cliente) {
+        return a.cliente.localeCompare(b.cliente);
+      }
       return b.valor - a.valor;
     });
 
-    Logger.log("✅ getPedidosAFaturar concluído: " + resultado.length + " clientes");
+    Logger.log("✅ getPedidosAFaturar concluído: " + resultado.length + " linhas (cliente+marca)");
 
     return {
       sucesso: true,
