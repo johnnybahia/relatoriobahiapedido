@@ -1,10 +1,188 @@
 // --- ARQUIVO: Código.gs ---
 
+// ========================================
+// SISTEMA DE AUTENTICAÇÃO
+// ========================================
+
+/**
+ * Verifica login contra a aba "senha" da planilha
+ * @param {string} usuario - Nome de usuário
+ * @param {string} senha - Senha
+ * @returns {Object} Resultado da verificação
+ */
+function verificarLogin(usuario, senha) {
+  try {
+    Logger.log("🔐 Verificando login para usuário: " + usuario);
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("senha");
+
+    if (!sheet) {
+      Logger.log("❌ Aba 'senha' não encontrada!");
+      return {
+        sucesso: false,
+        mensagem: "Erro de configuração do sistema"
+      };
+    }
+
+    var lastRow = sheet.getLastRow();
+
+    if (lastRow < 2) {
+      Logger.log("❌ Nenhum usuário cadastrado");
+      return {
+        sucesso: false,
+        mensagem: "Nenhum usuário cadastrado"
+      };
+    }
+
+    // Lê todos os usuários (pula cabeçalho)
+    var dados = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+
+    // Verifica se usuário e senha conferem
+    for (var i = 0; i < dados.length; i++) {
+      var usuarioNaAba = dados[i][0] ? dados[i][0].toString().trim().toUpperCase() : "";
+      var senhaNaAba = dados[i][1] ? dados[i][1].toString().trim() : "";
+
+      var usuarioDigitado = usuario ? usuario.toString().trim().toUpperCase() : "";
+      var senhaDigitada = senha ? senha.toString().trim() : "";
+
+      if (usuarioNaAba === usuarioDigitado && senhaNaAba === senhaDigitada) {
+        Logger.log("✅ Login bem-sucedido para: " + usuario);
+
+        // Gera token de sessão
+        var token = gerarTokenSessao(usuario);
+
+        return {
+          sucesso: true,
+          mensagem: "Login realizado com sucesso!",
+          usuario: usuario,
+          token: token
+        };
+      }
+    }
+
+    Logger.log("❌ Credenciais inválidas para: " + usuario);
+    return {
+      sucesso: false,
+      mensagem: "Usuário ou senha incorretos"
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao verificar login: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro ao verificar credenciais"
+    };
+  }
+}
+
+/**
+ * Gera um token de sessão simples
+ * @param {string} usuario - Nome de usuário
+ * @returns {string} Token de sessão
+ */
+function gerarTokenSessao(usuario) {
+  var agora = new Date().getTime();
+  var props = PropertiesService.getScriptProperties();
+
+  // Token = base64(usuario:timestamp)
+  var tokenData = usuario + ":" + agora;
+  var token = Utilities.base64Encode(tokenData);
+
+  // Salva o token com timestamp
+  props.setProperty('TOKEN_' + token, JSON.stringify({
+    usuario: usuario,
+    timestamp: agora
+  }));
+
+  Logger.log("🔑 Token gerado para: " + usuario);
+  return token;
+}
+
+/**
+ * Valida um token de sessão
+ * @param {string} token - Token a validar
+ * @returns {Object} Resultado da validação
+ */
+function validarToken(token) {
+  try {
+    if (!token) {
+      return { valido: false, mensagem: "Token não fornecido" };
+    }
+
+    var props = PropertiesService.getScriptProperties();
+    var tokenData = props.getProperty('TOKEN_' + token);
+
+    if (!tokenData) {
+      return { valido: false, mensagem: "Token inválido" };
+    }
+
+    var dados = JSON.parse(tokenData);
+    var agora = new Date().getTime();
+    var tempoDecorrido = agora - dados.timestamp;
+
+    // Token válido por 8 horas (28800000 ms)
+    var VALIDADE_TOKEN = 8 * 60 * 60 * 1000;
+
+    if (tempoDecorrido > VALIDADE_TOKEN) {
+      // Token expirado
+      props.deleteProperty('TOKEN_' + token);
+      return { valido: false, mensagem: "Sessão expirada" };
+    }
+
+    return {
+      valido: true,
+      usuario: dados.usuario
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao validar token: " + erro.toString());
+    return { valido: false, mensagem: "Erro na validação" };
+  }
+}
+
+/**
+ * Faz logout invalidando o token
+ * @param {string} token - Token a invalidar
+ */
+function fazerLogout(token) {
+  try {
+    if (token) {
+      var props = PropertiesService.getScriptProperties();
+      props.deleteProperty('TOKEN_' + token);
+      Logger.log("👋 Logout realizado");
+    }
+    return { sucesso: true };
+  } catch (erro) {
+    Logger.log("❌ Erro ao fazer logout: " + erro.toString());
+    return { sucesso: false };
+  }
+}
+
 // 1. O SITE (Para o ser humano ver)
 function doGet(e) {
-  var template = HtmlService.createTemplateFromFile('Index');
+  // Verifica se há token na URL
+  var token = e.parameter.token;
+
+  if (token) {
+    // Valida o token
+    var validacao = validarToken(token);
+
+    if (validacao.valido) {
+      // Token válido - mostra a página principal
+      var template = HtmlService.createTemplateFromFile('Index');
+      template.usuarioLogado = validacao.usuario;
+      template.token = token;
+      return template.evaluate()
+          .setTitle('Pedidos por Marca - Marfim Bahia')
+          .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+          .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
+  }
+
+  // Sem token ou token inválido - mostra página de login
+  var template = HtmlService.createTemplateFromFile('Login');
   return template.evaluate()
-      .setTitle('Pedidos por Marca - Marfim Bahia')
+      .setTitle('Login - Marfim Bahia')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

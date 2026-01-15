@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Marfim Bahia</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary-color: #d32f2f; /* Vermelho Marfim */
+      --dark-bg: #2c3e50;
+      --light-bg: #f4f6f8;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 420px;
+      overflow: hidden;
+      animation: slideUp 0.5s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .login-header {
+      background-color: var(--primary-color);
+      padding: 40px 30px;
+      text-align: center;
+      color: white;
+    }
+
+    .logo {
+      width: 120px;
+      height: auto;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      background: white;
+      padding: 10px;
+    }
+
+    .login-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    .login-header p {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .login-body {
+      padding: 40px 30px;
+    }
+
+    .form-group {
+      margin-bottom: 25px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: #555;
+      margin-bottom: 8px;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #999;
+      font-size: 18px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 14px 45px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: all 0.3s;
+      font-family: 'Roboto', sans-serif;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.1);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 14px;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-top: 10px;
+    }
+
+    .btn-login:hover {
+      background-color: #b71c1c;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(211, 47, 47, 0.3);
+    }
+
+    .btn-login:active {
+      transform: translateY(0);
+    }
+
+    .btn-login:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .alert {
+      padding: 12px 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+      animation: shake 0.5s;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+      20%, 40%, 60%, 80% { transform: translateX(5px); }
+    }
+
+    .alert-error {
+      background-color: #ffebee;
+      color: #c62828;
+      border: 1px solid #ef9a9a;
+    }
+
+    .alert-success {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #a5d6a7;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .login-footer {
+      text-align: center;
+      padding: 20px;
+      background-color: #f9f9f9;
+      border-top: 1px solid #e0e0e0;
+      font-size: 13px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-container">
+    <div class="login-header">
+      <img src="https://i.ibb.co/FGGjdsM/LOGO-MARFIM.jpg" alt="Logo Marfim" class="logo">
+      <h1>Bem-vindo</h1>
+      <p>Faça login para acessar o sistema</p>
+    </div>
+
+    <div class="login-body">
+      <div id="alert" class="alert"></div>
+
+      <form id="loginForm" onsubmit="fazerLogin(event)">
+        <div class="form-group">
+          <label for="usuario">Usuário</label>
+          <div class="input-wrapper">
+            <span class="input-icon">👤</span>
+            <input
+              type="text"
+              id="usuario"
+              placeholder="Digite seu usuário"
+              required
+              autocomplete="username"
+              autofocus>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="senha">Senha</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🔒</span>
+            <input
+              type="password"
+              id="senha"
+              placeholder="Digite sua senha"
+              required
+              autocomplete="current-password">
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login" id="btnLogin">
+          Entrar
+        </button>
+      </form>
+    </div>
+
+    <div class="login-footer">
+      MARFIM BAHIA - Sistema de Gestão de Pedidos
+    </div>
+  </div>
+
+  <script>
+    function fazerLogin(event) {
+      event.preventDefault();
+
+      var usuario = document.getElementById('usuario').value.trim();
+      var senha = document.getElementById('senha').value.trim();
+      var btnLogin = document.getElementById('btnLogin');
+      var alert = document.getElementById('alert');
+
+      // Validação básica
+      if (!usuario || !senha) {
+        mostrarAlerta('Por favor, preencha todos os campos', 'error');
+        return;
+      }
+
+      // Desabilita botão e mostra loading
+      btnLogin.disabled = true;
+      btnLogin.innerHTML = '<span class="spinner"></span> Verificando...';
+      alert.style.display = 'none';
+
+      // Chama função do backend
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          if (resultado.sucesso) {
+            mostrarAlerta('Login realizado com sucesso! Redirecionando...', 'success');
+
+            // Redireciona para a página principal com o token
+            setTimeout(function() {
+              var url = window.location.href.split('?')[0];
+              window.location.href = url + '?token=' + encodeURIComponent(resultado.token);
+            }, 1000);
+
+          } else {
+            btnLogin.disabled = false;
+            btnLogin.innerHTML = 'Entrar';
+            mostrarAlerta(resultado.mensagem || 'Usuário ou senha incorretos', 'error');
+          }
+        })
+        .withFailureHandler(function(erro) {
+          btnLogin.disabled = false;
+          btnLogin.innerHTML = 'Entrar';
+          mostrarAlerta('Erro ao conectar ao servidor: ' + erro.message, 'error');
+        })
+        .verificarLogin(usuario, senha);
+    }
+
+    function mostrarAlerta(mensagem, tipo) {
+      var alert = document.getElementById('alert');
+      alert.className = 'alert alert-' + tipo;
+      alert.textContent = mensagem;
+      alert.style.display = 'block';
+    }
+
+    // Limpa mensagem de erro ao digitar
+    document.getElementById('usuario').addEventListener('input', function() {
+      document.getElementById('alert').style.display = 'none';
+    });
+
+    document.getElementById('senha').addEventListener('input', function() {
+      document.getElementById('alert').style.display = 'none';
+    });
+  </script>
+
+</body>
+</html>
