@@ -278,8 +278,14 @@
       // Chama função do backend
       google.script.run
         .withSuccessHandler(function(resultado) {
+          console.log("✅ Resposta do backend:", resultado);
+
           if (resultado.sucesso) {
             mostrarAlerta('Login realizado com sucesso! Redirecionando...', 'success');
+
+            // Debug: mostra o token recebido
+            console.log("🔑 Token recebido:", resultado.token);
+            console.log("📍 URL atual:", window.location.href);
 
             // Redireciona para a página principal com o token
             setTimeout(function() {
@@ -288,9 +294,12 @@
                 var url = window.location.href.split('?')[0];
                 var urlComToken = url + '?token=' + encodeURIComponent(resultado.token);
 
+                console.log("🚀 Redirecionando para:", urlComToken);
+
                 // Usa replace() para redirecionar sem adicionar ao histórico
                 window.location.replace(urlComToken);
               } catch (e) {
+                console.error("❌ Erro no redirecionamento:", e);
                 // Fallback: se replace falhar, usa href
                 var url = window.location.href.split('?')[0];
                 window.location.href = url + '?token=' + encodeURIComponent(resultado.token);
