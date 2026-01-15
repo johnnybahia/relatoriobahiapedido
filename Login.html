@@ -281,42 +281,48 @@
           console.log("✅ Resposta do backend:", resultado);
 
           if (resultado.sucesso) {
-            mostrarAlerta('Login realizado com sucesso! Redirecionando...', 'success');
-
             // Debug: mostra o token recebido
             console.log("🔑 Token recebido:", resultado.token);
             console.log("📍 URL atual:", window.location.href);
 
-            // Redireciona para a página principal com o token
+            // Prepara URL com token
+            var url = window.location.href.split('?')[0];
+            var timestamp = new Date().getTime();
+            var urlComToken = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
+
+            console.log("🚀 URL de destino:", urlComToken);
+
+            // Atualiza a mensagem com link clicável
+            var alertDiv = document.getElementById('alert');
+            alertDiv.className = 'alert alert-success';
+            alertDiv.innerHTML = '✅ Login realizado com sucesso! Redirecionando...<br><br>' +
+              '<small>Se não redirecionar automaticamente, <a href="' + urlComToken + '" style="color: #2e7d32; font-weight: bold;">clique aqui</a></small>';
+            alertDiv.style.display = 'block';
+
+            // Tenta múltiplas formas de redirecionar
             setTimeout(function() {
-              try {
-                // Tenta obter a URL base (sem parâmetros)
-                var url = window.location.href.split('?')[0];
+              console.log("🔄 Tentando redirecionar (método 1: window.location)...");
+              window.location = urlComToken;
+            }, 500);
 
-                // Adiciona token e timestamp para evitar cache
-                var timestamp = new Date().getTime();
-                var urlComToken = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
-
-                console.log("🚀 Redirecionando para:", urlComToken);
-
-                // Detecta se está na URL de desenvolvimento (userCodeAppPanel)
-                if (url.indexOf('userCodeAppPanel') > -1) {
-                  console.warn("⚠️ ATENÇÃO: Você está usando a URL de desenvolvimento!");
-                  console.warn("⚠️ Para melhor funcionamento, implante o app e use a URL de produção (/exec)");
-                  // Para URL de desenvolvimento, força reload com href
-                  window.location.href = urlComToken;
-                } else {
-                  // Para URL de produção, usa replace()
-                  window.location.replace(urlComToken);
-                }
-              } catch (e) {
-                console.error("❌ Erro no redirecionamento:", e);
-                // Fallback: força href em qualquer caso
-                var url = window.location.href.split('?')[0];
-                var timestamp = new Date().getTime();
-                window.location.href = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
-              }
+            setTimeout(function() {
+              console.log("🔄 Tentando redirecionar (método 2: window.location.href)...");
+              window.location.href = urlComToken;
             }, 1000);
+
+            setTimeout(function() {
+              console.log("🔄 Tentando redirecionar (método 3: window.location.assign)...");
+              window.location.assign(urlComToken);
+            }, 1500);
+
+            setTimeout(function() {
+              console.log("🔄 Tentando redirecionar (método 4: top.location)...");
+              try {
+                top.location.href = urlComToken;
+              } catch (e) {
+                console.warn("⚠️ top.location falhou:", e.message);
+              }
+            }, 2000);
 
           } else {
             btnLogin.disabled = false;
