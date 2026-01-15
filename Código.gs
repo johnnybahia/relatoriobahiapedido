@@ -500,6 +500,9 @@ function getFaturamentoDia() {
 
       // Atualiza resultado para retornar o acumulado
       resultado = novoAcumulado;
+
+      // Salva no histórico da planilha (apenas quando é novo faturamento no acumulado)
+      salvarFaturamentoNoHistorico(novoAcumulado, diaAtual);
     } else if (faturamentoAcumulado.length > 0) {
       // Não houve novo faturamento, mas há acumulado do dia
       Logger.log("ℹ️ Nenhum novo faturamento nesta verificação, mantendo acumulado do dia");
@@ -557,6 +560,160 @@ function getUltimoFaturamento() {
     return {
       sucesso: false,
       timestamp: null,
+      dados: [],
+      erro: erro.toString()
+    };
+  }
+}
+
+/**
+ * Salva o faturamento do dia no histórico da planilha
+ * @param {Array} dados - Array com os dados do faturamento
+ * @param {string} data - Data no formato DD/MM/AAAA
+ */
+function salvarFaturamentoNoHistorico(dados, data) {
+  try {
+    if (!dados || dados.length === 0) {
+      Logger.log("⚠️ Nenhum dado para salvar no histórico");
+      return;
+    }
+
+    var doc = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = doc.getSheetByName("HistoricoFaturamento");
+
+    // Cria a aba se não existir
+    if (!sheet) {
+      Logger.log("📋 Criando aba 'HistoricoFaturamento'...");
+      sheet = doc.insertSheet("HistoricoFaturamento");
+      // Adiciona cabeçalho
+      sheet.appendRow(["Data", "Cliente", "Marca", "Valor Faturado", "Timestamp"]);
+      // Formata cabeçalho
+      var headerRange = sheet.getRange(1, 1, 1, 5);
+      headerRange.setBackground("#d32f2f");
+      headerRange.setFontColor("#FFFFFF");
+      headerRange.setFontWeight("bold");
+      sheet.setFrozenRows(1);
+    }
+
+    var timestamp = obterTimestamp();
+    var novasLinhas = [];
+
+    // Verifica se já existe entrada para esta data
+    var lastRow = sheet.getLastRow();
+    var datasExistentes = [];
+
+    if (lastRow > 1) {
+      // Pega as datas já registradas (coluna A)
+      var dadosExistentes = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      datasExistentes = dadosExistentes.map(function(row) { return row[0]; });
+    }
+
+    // Se já existe entrada para hoje, atualiza (substitui) ao invés de duplicar
+    var jaExisteHoje = datasExistentes.indexOf(data) !== -1;
+
+    if (jaExisteHoje) {
+      Logger.log("🔄 Atualizando faturamento existente para " + data);
+
+      // Remove linhas antigas do dia
+      for (var i = lastRow; i >= 2; i--) {
+        var dataLinha = sheet.getRange(i, 1).getValue();
+        if (dataLinha === data) {
+          sheet.deleteRow(i);
+        }
+      }
+    }
+
+    // Adiciona novas linhas
+    dados.forEach(function(item) {
+      novasLinhas.push([
+        data,
+        item.cliente,
+        item.marca,
+        item.valor,
+        timestamp
+      ]);
+    });
+
+    if (novasLinhas.length > 0) {
+      var ultimaLinha = sheet.getLastRow();
+      sheet.getRange(ultimaLinha + 1, 1, novasLinhas.length, 5).setValues(novasLinhas);
+
+      // Formata valores como moeda
+      var valorRange = sheet.getRange(ultimaLinha + 1, 4, novasLinhas.length, 1);
+      valorRange.setNumberFormat("R$ #,##0.00");
+
+      Logger.log("✅ Salvou " + novasLinhas.length + " linhas no histórico para " + data);
+    }
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao salvar no histórico: " + erro.toString());
+  }
+}
+
+/**
+ * Retorna o histórico completo de faturamentos salvos na planilha
+ * @returns {Object} Objeto com array de histórico
+ */
+function getHistoricoFaturamento() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+
+    if (!sheet) {
+      Logger.log("⚠️ Aba 'HistoricoFaturamento' não encontrada");
+      return {
+        sucesso: true,
+        dados: [],
+        mensagem: "Nenhum histórico disponível ainda."
+      };
+    }
+
+    var lastRow = sheet.getLastRow();
+
+    if (lastRow < 2) {
+      Logger.log("⚠️ Histórico vazio");
+      return {
+        sucesso: true,
+        dados: [],
+        mensagem: "Nenhum histórico disponível ainda."
+      };
+    }
+
+    // Lê todos os dados (pula cabeçalho)
+    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+
+    var historico = [];
+
+    dados.forEach(function(row) {
+      historico.push({
+        data: row[0].toString(),
+        cliente: row[1].toString(),
+        marca: row[2].toString(),
+        valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0,
+        timestamp: row[4].toString()
+      });
+    });
+
+    // Ordena por data (mais recente primeiro)
+    historico.sort(function(a, b) {
+      // Converte DD/MM/AAAA para comparação
+      var partesA = a.data.split('/');
+      var partesB = b.data.split('/');
+      var dataA = new Date(partesA[2], partesA[1] - 1, partesA[0]);
+      var dataB = new Date(partesB[2], partesB[1] - 1, partesB[0]);
+      return dataB - dataA;
+    });
+
+    Logger.log("✅ Retornou " + historico.length + " registros do histórico");
+
+    return {
+      sucesso: true,
+      dados: historico
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao ler histórico: " + erro.toString());
+    return {
+      sucesso: false,
       dados: [],
       erro: erro.toString()
     };
