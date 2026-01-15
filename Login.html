@@ -292,17 +292,29 @@
               try {
                 // Tenta obter a URL base (sem parâmetros)
                 var url = window.location.href.split('?')[0];
-                var urlComToken = url + '?token=' + encodeURIComponent(resultado.token);
+
+                // Adiciona token e timestamp para evitar cache
+                var timestamp = new Date().getTime();
+                var urlComToken = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
 
                 console.log("🚀 Redirecionando para:", urlComToken);
 
-                // Usa replace() para redirecionar sem adicionar ao histórico
-                window.location.replace(urlComToken);
+                // Detecta se está na URL de desenvolvimento (userCodeAppPanel)
+                if (url.indexOf('userCodeAppPanel') > -1) {
+                  console.warn("⚠️ ATENÇÃO: Você está usando a URL de desenvolvimento!");
+                  console.warn("⚠️ Para melhor funcionamento, implante o app e use a URL de produção (/exec)");
+                  // Para URL de desenvolvimento, força reload com href
+                  window.location.href = urlComToken;
+                } else {
+                  // Para URL de produção, usa replace()
+                  window.location.replace(urlComToken);
+                }
               } catch (e) {
                 console.error("❌ Erro no redirecionamento:", e);
-                // Fallback: se replace falhar, usa href
+                // Fallback: força href em qualquer caso
                 var url = window.location.href.split('?')[0];
-                window.location.href = url + '?token=' + encodeURIComponent(resultado.token);
+                var timestamp = new Date().getTime();
+                window.location.href = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
               }
             }, 1000);
 
