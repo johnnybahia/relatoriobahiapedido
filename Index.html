@@ -847,10 +847,20 @@
 
       // Token presente - o backend já validou
       // O Google Apps Script injetou o nome do usuário via template
-      var nomeUsuario = "<?!= typeof usuarioLogado !== 'undefined' ? usuarioLogado : 'Usuário' ?>";
-      setarNomeUsuario(nomeUsuario);
+      try {
+        var nomeUsuario = "<?= usuarioLogado ?>";
+        if (nomeUsuario && nomeUsuario.trim() !== "") {
+          setarNomeUsuario(nomeUsuario);
+          addDebugLog("✅ Autenticado como: " + nomeUsuario);
+        } else {
+          setarNomeUsuario("Usuário");
+          addDebugLog("✅ Autenticado (usuário não identificado)");
+        }
+      } catch (e) {
+        setarNomeUsuario("Usuário");
+        addDebugLog("⚠️ Erro ao obter nome do usuário: " + e.message);
+      }
 
-      addDebugLog("✅ Autenticado como: " + nomeUsuario);
       return true;
     }
 
