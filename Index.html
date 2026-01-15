@@ -396,6 +396,156 @@
         grid-template-columns: 1fr;
       }
     }
+
+    /* BOTÃO VER HISTÓRICO */
+    .btn-historico {
+      background-color: #2980b9;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 10px;
+      transition: background-color 0.3s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-historico:hover {
+      background-color: #1f618d;
+    }
+
+    /* MODAL DE HISTÓRICO */
+    .modal-historico {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal-content-historico {
+      background-color: white;
+      margin: 5% auto;
+      padding: 0;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 1000px;
+      max-height: 80vh;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      animation: slideDown 0.3s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    @keyframes slideDown {
+      from {
+        transform: translateY(-50px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .modal-header-historico {
+      background-color: #d32f2f;
+      color: white;
+      padding: 20px;
+      border-radius: 8px 8px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header-historico h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .close-historico {
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.2s;
+      line-height: 1;
+    }
+
+    .close-historico:hover {
+      transform: scale(1.1);
+    }
+
+    .modal-body-historico {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .historico-tabela {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    .historico-tabela th {
+      background-color: #f8f9fa;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 2px solid #ddd;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #555;
+      position: sticky;
+      top: 0;
+      background-color: #f8f9fa;
+      z-index: 10;
+    }
+
+    .historico-tabela td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+    }
+
+    .historico-tabela tr:hover {
+      background-color: #f9f9f9;
+    }
+
+    .data-grupo {
+      background-color: #e3f2fd !important;
+      font-weight: bold;
+      color: #1565c0;
+      border-top: 2px solid #1565c0 !important;
+    }
+
+    .total-dia {
+      background-color: #fff3e0 !important;
+      font-weight: bold;
+      color: #e65100;
+      border-top: 1px solid #e65100 !important;
+    }
+
+    .empty-historico {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -490,6 +640,9 @@
           <div class="card-body-faturamento" id="listaFaturamento">
             <div class="loading-faturamento">Carregando dados...</div>
           </div>
+          <button class="btn-historico" onclick="abrirHistoricoFaturamento()">
+            📊 Ver Histórico Completo
+          </button>
         </div>
       </div>
 
@@ -568,6 +721,21 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- MODAL: HISTÓRICO DE FATURAMENTOS -->
+  <div id="modalHistorico" class="modal-historico">
+    <div class="modal-content-historico">
+      <div class="modal-header-historico">
+        <h2>📊 Histórico de Faturamentos</h2>
+        <span class="close-historico" onclick="fecharHistoricoFaturamento()">&times;</span>
+      </div>
+      <div class="modal-body-historico">
+        <div id="conteudoHistorico">
+          <div class="loading-faturamento">Carregando histórico...</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1290,6 +1458,117 @@
 
     // ========================================
     // FIM DAS FUNÇÕES DE FATURAMENTO
+    // ========================================
+
+    // ========================================
+    // FUNÇÕES DO HISTÓRICO DE FATURAMENTO
+    // ========================================
+
+    // Abre o modal de histórico
+    function abrirHistoricoFaturamento() {
+      addDebugLog("📊 Abrindo modal de histórico de faturamentos...");
+      document.getElementById('modalHistorico').style.display = 'block';
+      carregarHistoricoFaturamento();
+    }
+
+    // Fecha o modal de histórico
+    function fecharHistoricoFaturamento() {
+      document.getElementById('modalHistorico').style.display = 'none';
+    }
+
+    // Fecha o modal ao clicar fora dele
+    window.onclick = function(event) {
+      var modal = document.getElementById('modalHistorico');
+      if (event.target == modal) {
+        fecharHistoricoFaturamento();
+      }
+    }
+
+    // Carrega o histórico de faturamentos da planilha
+    function carregarHistoricoFaturamento() {
+      addDebugLog("📥 Carregando histórico de faturamentos...");
+      document.getElementById('conteudoHistorico').innerHTML = '<div class="loading-faturamento">Carregando histórico...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          addDebugLog("✅ Histórico recebido: " + (resultado.dados ? resultado.dados.length : 0) + " registros", "success");
+
+          if (!resultado.sucesso || !resultado.dados || resultado.dados.length === 0) {
+            var mensagem = resultado.mensagem || 'Nenhum histórico disponível ainda.';
+            document.getElementById('conteudoHistorico').innerHTML =
+              '<div class="empty-historico">📭 ' + mensagem + '</div>';
+            return;
+          }
+
+          // Agrupa por data
+          var dadosPorData = {};
+          resultado.dados.forEach(function(item) {
+            if (!dadosPorData[item.data]) {
+              dadosPorData[item.data] = [];
+            }
+            dadosPorData[item.data].push(item);
+          });
+
+          // Renderiza tabela
+          var html = '<table class="historico-tabela">';
+          html += '<thead><tr>';
+          html += '<th>Data</th>';
+          html += '<th>Cliente</th>';
+          html += '<th>Marca</th>';
+          html += '<th>Valor Faturado</th>';
+          html += '</tr></thead>';
+          html += '<tbody>';
+
+          // Ordena datas (mais recentes primeiro)
+          var datas = Object.keys(dadosPorData).sort(function(a, b) {
+            var partesA = a.split('/');
+            var partesB = b.split('/');
+            var dataA = new Date(partesA[2], partesA[1] - 1, partesA[0]);
+            var dataB = new Date(partesB[2], partesB[1] - 1, partesB[0]);
+            return dataB - dataA;
+          });
+
+          datas.forEach(function(data) {
+            var itensDia = dadosPorData[data];
+            var totalDia = 0;
+
+            // Cabeçalho do dia
+            html += '<tr class="data-grupo">';
+            html += '<td colspan="4">📅 ' + data + '</td>';
+            html += '</tr>';
+
+            // Itens do dia
+            itensDia.forEach(function(item) {
+              html += '<tr>';
+              html += '<td></td>';
+              html += '<td><b>' + item.cliente + '</b></td>';
+              html += '<td><span class="marca-badge-faturamento">' + item.marca + '</span></td>';
+              html += '<td class="valor-faturamento">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+              html += '</tr>';
+              totalDia += item.valor;
+            });
+
+            // Total do dia
+            html += '<tr class="total-dia">';
+            html += '<td colspan="3"><strong>Total do dia ' + data + '</strong></td>';
+            html += '<td class="valor-faturamento">R$ ' + totalDia.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+            html += '</tr>';
+          });
+
+          html += '</tbody></table>';
+
+          document.getElementById('conteudoHistorico').innerHTML = html;
+        })
+        .withFailureHandler(function(error) {
+          addDebugLog("❌ Erro ao carregar histórico: " + error.message, "error");
+          document.getElementById('conteudoHistorico').innerHTML =
+            '<div class="empty-historico">❌ Erro ao carregar histórico: ' + error.message + '</div>';
+        })
+        .getHistoricoFaturamento();
+    }
+
+    // ========================================
+    // FIM DAS FUNÇÕES DE HISTÓRICO
     // ========================================
 
     // Função para Imprimir Relatório
