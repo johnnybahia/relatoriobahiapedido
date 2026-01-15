@@ -840,7 +840,7 @@
 
       if (!tokenSessao) {
         // Sem token - redireciona para login
-        addDebugLog("❌ Token não encontrado - redirecionando para login");
+        console.log("❌ Token não encontrado - redirecionando para login");
         window.location.href = window.location.href.split('?')[0];
         return false;
       }
@@ -849,16 +849,18 @@
       // O Google Apps Script injetou o nome do usuário via template
       try {
         var nomeUsuario = "<?= usuarioLogado ?>";
-        if (nomeUsuario && nomeUsuario.trim() !== "") {
+        console.log("Nome do usuário recebido do template:", nomeUsuario);
+
+        if (nomeUsuario && nomeUsuario.trim() !== "" && nomeUsuario !== "<?= usuarioLogado ?>") {
           setarNomeUsuario(nomeUsuario);
-          addDebugLog("✅ Autenticado como: " + nomeUsuario);
+          console.log("✅ Autenticado como:", nomeUsuario);
         } else {
           setarNomeUsuario("Usuário");
-          addDebugLog("✅ Autenticado (usuário não identificado)");
+          console.log("⚠️ Usando nome padrão 'Usuário'");
         }
       } catch (e) {
+        console.error("Erro ao obter nome do usuário:", e);
         setarNomeUsuario("Usuário");
-        addDebugLog("⚠️ Erro ao obter nome do usuário: " + e.message);
       }
 
       return true;
@@ -888,11 +890,15 @@
 
     // Inicia quando a página carrega
     window.onload = function() {
+      console.log("🔄 Página carregada - iniciando sistema...");
+
       // Primeiro, inicializa autenticação
       if (!inicializarAutenticacao()) {
+        console.log("⚠️ Autenticação falhou - redirecionando");
         return; // Se falhar, já redirecionou para login
       }
 
+      console.log("✅ Autenticação OK - carregando dados");
       addDebugLog("🚀 Iniciando carregamento de dados...");
 
       google.script.run
