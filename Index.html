@@ -22,12 +22,55 @@
       padding: 15px 40px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       box-shadow: 0 2px 5px rgba(0,0,0,0.05);
       border-bottom: 3px solid var(--primary-color);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
     }
     .logo-img { height: 60px; margin-right: 20px; }
     .header-title { font-size: 24px; font-weight: 700; color: #333; }
     .header-subtitle { font-size: 14px; color: #666; margin-top: 5px; }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .user-info {
+      text-align: right;
+      margin-right: 10px;
+    }
+    .user-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+    }
+    .user-label {
+      font-size: 11px;
+      color: #999;
+      text-transform: uppercase;
+    }
+    .btn-logout {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-logout:hover {
+      background-color: #d32f2f;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
+    }
 
     /* CONTAINER PRINCIPAL */
     .container { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
@@ -551,10 +594,21 @@
 <body>
 
   <div class="header">
-    <img src="https://i.ibb.co/FGGjdsM/LOGO-MARFIM.jpg" alt="Logo Marfim" class="logo-img">
-    <div>
-      <div class="header-title">PEDIDO POR MARCA</div>
-      <div class="header-subtitle">MARFIM BAHIA - Painel Gerencial</div>
+    <div class="header-left">
+      <img src="https://i.ibb.co/FGGjdsM/LOGO-MARFIM.jpg" alt="Logo Marfim" class="logo-img">
+      <div>
+        <div class="header-title">PEDIDO POR MARCA</div>
+        <div class="header-subtitle">MARFIM BAHIA - Painel Gerencial</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="user-info">
+        <div class="user-label">Usuário</div>
+        <div class="user-name" id="nomeUsuario">Carregando...</div>
+      </div>
+      <button class="btn-logout" onclick="fazerLogout()">
+        🚪 Sair
+      </button>
     </div>
   </div>
 
@@ -742,6 +796,63 @@
   <script>
     var dadosBrutos = []; // Variável global segura
     var linhasFiltradas = []; // Para exportação CSV
+    var tokenSessao = ""; // Token de autenticação
+    var usuarioLogado = ""; // Nome do usuário logado
+
+    // ========================================
+    // FUNÇÕES DE AUTENTICAÇÃO
+    // ========================================
+
+    // Extrai o token da URL
+    function extrairTokenDaURL() {
+      var urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('token');
+    }
+
+    // Define o nome do usuário no header
+    function setarNomeUsuario(nome) {
+      document.getElementById('nomeUsuario').textContent = nome.toUpperCase();
+      usuarioLogado = nome;
+    }
+
+    // Faz logout
+    function fazerLogout() {
+      if (confirm('Deseja realmente sair do sistema?')) {
+        addDebugLog("👋 Fazendo logout...");
+
+        // Chama função do backend para invalidar token
+        google.script.run
+          .withSuccessHandler(function() {
+            // Redireciona para a página de login
+            window.location.href = window.location.href.split('?')[0];
+          })
+          .withFailureHandler(function() {
+            // Mesmo com erro, redireciona
+            window.location.href = window.location.href.split('?')[0];
+          })
+          .fazerLogout(tokenSessao);
+      }
+    }
+
+    // Inicializa autenticação
+    function inicializarAutenticacao() {
+      tokenSessao = extrairTokenDaURL();
+
+      if (!tokenSessao) {
+        // Sem token - redireciona para login
+        addDebugLog("❌ Token não encontrado - redirecionando para login");
+        window.location.href = window.location.href.split('?')[0];
+        return false;
+      }
+
+      // Token presente - o backend já validou
+      // O Google Apps Script injetou o nome do usuário via template
+      var nomeUsuario = "<?!= typeof usuarioLogado !== 'undefined' ? usuarioLogado : 'Usuário' ?>";
+      setarNomeUsuario(nomeUsuario);
+
+      addDebugLog("✅ Autenticado como: " + nomeUsuario);
+      return true;
+    }
 
     // Função de Debug
     function addDebugLog(msg, tipo = "info") {
@@ -767,6 +878,11 @@
 
     // Inicia quando a página carrega
     window.onload = function() {
+      // Primeiro, inicializa autenticação
+      if (!inicializarAutenticacao()) {
+        return; // Se falhar, já redirecionou para login
+      }
+
       addDebugLog("🚀 Iniciando carregamento de dados...");
 
       google.script.run
