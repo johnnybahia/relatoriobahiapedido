@@ -283,8 +283,8 @@
 
             // Redireciona para a página principal com o token
             setTimeout(function() {
-              var url = window.location.href.split('?')[0];
-              window.location.href = url + '?token=' + encodeURIComponent(resultado.token);
+              var url = window.top.location.href.split('?')[0];
+              window.top.location.href = url + '?token=' + encodeURIComponent(resultado.token);
             }, 1000);
 
           } else {
