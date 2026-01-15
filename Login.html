@@ -278,22 +278,35 @@
       // Chama função do backend
       google.script.run
         .withSuccessHandler(function(resultado) {
+          console.log("📥 Resultado do login:", resultado);
+
           if (resultado.sucesso) {
+            console.log("✅ Login bem-sucedido");
+            console.log("🔑 Token recebido:", resultado.token);
+
             mostrarAlerta('Login realizado com sucesso! Redirecionando...', 'success');
 
             // Redireciona para a página principal com o token
             setTimeout(function() {
               var url = window.location.href.split('?')[0];
-              window.location.href = url + '?token=' + encodeURIComponent(resultado.token);
+              var urlComToken = url + '?token=' + encodeURIComponent(resultado.token);
+
+              console.log("🌐 URL base:", url);
+              console.log("🔗 URL completa com token:", urlComToken);
+              console.log("🚀 Redirecionando...");
+
+              window.location.href = urlComToken;
             }, 1000);
 
           } else {
+            console.log("❌ Login falhou:", resultado.mensagem);
             btnLogin.disabled = false;
             btnLogin.innerHTML = 'Entrar';
             mostrarAlerta(resultado.mensagem || 'Usuário ou senha incorretos', 'error');
           }
         })
         .withFailureHandler(function(erro) {
+          console.error("❌ Erro ao fazer login:", erro);
           btnLogin.disabled = false;
           btnLogin.innerHTML = 'Entrar';
           mostrarAlerta('Erro ao conectar ao servidor: ' + erro.message, 'error');
