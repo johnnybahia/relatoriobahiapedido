@@ -428,14 +428,85 @@ function getFaturamentoDia() {
     props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
     props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
 
-    // Salva o último faturamento detectado (persiste para webapp)
-    if (resultado.length > 0) {
-      props.setProperty('ULTIMO_FATURAMENTO', JSON.stringify(resultado));
-      props.setProperty('ULTIMO_FATURAMENTO_TIMESTAMP', obterTimestamp());
-      Logger.log("💾 Salvou faturamento detectado: " + resultado.length + " itens");
+    // === LÓGICA ACUMULATIVA: Acumula faturamentos do mesmo dia ===
+    var dataAtual = new Date();
+    var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
+                   ("0" + (dataAtual.getMonth() + 1)).slice(-2) + "/" +
+                   dataAtual.getFullYear();
+
+    var diaArmazenado = props.getProperty('FATURAMENTO_DATA');
+    var faturamentoAcumulado = [];
+
+    // Verifica se é um novo dia
+    if (diaArmazenado !== diaAtual) {
+      // Novo dia - reseta o acumulado
+      Logger.log("📅 Novo dia detectado (" + diaAtual + ") - resetando acumulado de faturamento");
+      props.setProperty('FATURAMENTO_DATA', diaAtual);
+      faturamentoAcumulado = [];
+    } else {
+      // Mesmo dia - carrega o acumulado existente
+      var ultimoFaturamento = props.getProperty('ULTIMO_FATURAMENTO');
+      if (ultimoFaturamento) {
+        faturamentoAcumulado = JSON.parse(ultimoFaturamento);
+        Logger.log("📊 Mesmo dia - carregando acumulado existente (" + faturamentoAcumulado.length + " itens)");
+      }
     }
 
-    Logger.log("✅ getFaturamentoDia concluído: " + resultado.length + " itens faturados");
+    // Se houve novo faturamento nesta verificação, acumula com o existente
+    if (resultado.length > 0) {
+      Logger.log("💰 Novo faturamento detectado: " + resultado.length + " itens");
+
+      // Cria mapa para acumular
+      var mapAcumulado = {};
+
+      // Primeiro, adiciona o que já estava acumulado
+      faturamentoAcumulado.forEach(function(item) {
+        var chave = item.cliente + "|" + item.marca;
+        mapAcumulado[chave] = {
+          cliente: item.cliente,
+          marca: item.marca,
+          valor: item.valor
+        };
+      });
+
+      // Depois, soma o novo faturamento
+      resultado.forEach(function(item) {
+        var chave = item.cliente + "|" + item.marca;
+        if (!mapAcumulado[chave]) {
+          mapAcumulado[chave] = {
+            cliente: item.cliente,
+            marca: item.marca,
+            valor: 0
+          };
+        }
+        mapAcumulado[chave].valor += item.valor;
+      });
+
+      // Converte de volta para array
+      var novoAcumulado = Object.keys(mapAcumulado).map(function(chave) {
+        return mapAcumulado[chave];
+      });
+
+      // Ordena por valor (maior primeiro)
+      novoAcumulado.sort(function(a, b) {
+        return b.valor - a.valor;
+      });
+
+      // Salva o acumulado
+      props.setProperty('ULTIMO_FATURAMENTO', JSON.stringify(novoAcumulado));
+      props.setProperty('ULTIMO_FATURAMENTO_TIMESTAMP', obterTimestamp());
+
+      Logger.log("💾 Salvou faturamento acumulado: " + novoAcumulado.length + " itens (cliente+marca)");
+
+      // Atualiza resultado para retornar o acumulado
+      resultado = novoAcumulado;
+    } else if (faturamentoAcumulado.length > 0) {
+      // Não houve novo faturamento, mas há acumulado do dia
+      Logger.log("ℹ️ Nenhum novo faturamento nesta verificação, mantendo acumulado do dia");
+      resultado = faturamentoAcumulado;
+    }
+
+    Logger.log("✅ getFaturamentoDia concluído: " + resultado.length + " itens no total do dia");
 
     return {
       sucesso: true,
@@ -504,6 +575,29 @@ function obterTimestamp() {
   var min = ("0" + agora.getMinutes()).slice(-2);
 
   return dia + "/" + mes + "/" + ano + " às " + hora + ":" + min;
+}
+
+/**
+ * Função para resetar manualmente o acumulado de faturamento do dia
+ * USE ESTA FUNÇÃO PARA LIMPAR/RESETAR O ACUMULADO (útil para testes ou ajustes)
+ */
+function resetarAcumuladoFaturamento() {
+  Logger.log("🔄 Resetando acumulado de faturamento...");
+
+  var props = PropertiesService.getScriptProperties();
+
+  // Remove os dados acumulados
+  props.deleteProperty('ULTIMO_FATURAMENTO');
+  props.deleteProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
+  props.deleteProperty('FATURAMENTO_DATA');
+
+  Logger.log("✅ Acumulado resetado com sucesso!");
+  Logger.log("ℹ️ Na próxima verificação, o acumulado começará do zero");
+
+  return {
+    sucesso: true,
+    mensagem: "Acumulado resetado com sucesso"
+  };
 }
 
 /**
