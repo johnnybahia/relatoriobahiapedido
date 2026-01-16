@@ -590,6 +590,155 @@
       font-size: 14px;
     }
 
+    /* BOTÕES DE AÇÃO NO HISTÓRICO */
+    .btn-editar-historico,
+    .btn-deletar-historico {
+      padding: 6px 12px;
+      margin: 0 3px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .btn-editar-historico {
+      background-color: #2196F3;
+      color: white;
+    }
+
+    .btn-editar-historico:hover {
+      background-color: #1976D2;
+      transform: translateY(-1px);
+    }
+
+    .btn-deletar-historico {
+      background-color: #f44336;
+      color: white;
+    }
+
+    .btn-deletar-historico:hover {
+      background-color: #d32f2f;
+      transform: translateY(-1px);
+    }
+
+    /* COLUNA DE OBSERVAÇÃO */
+    .observacao-cell {
+      font-style: italic;
+      color: #666;
+      font-size: 12px;
+    }
+
+    .observacao-cell:empty::before {
+      content: "—";
+      color: #ccc;
+    }
+
+    /* MODAL DE EDIÇÃO */
+    .modal-editar {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+
+    .modal-editar-content {
+      background-color: white;
+      margin: 10% auto;
+      padding: 30px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    .modal-editar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #2196F3;
+    }
+
+    .modal-editar-header h3 {
+      margin: 0;
+      color: #2196F3;
+    }
+
+    .close-editar {
+      font-size: 28px;
+      font-weight: bold;
+      color: #999;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .close-editar:hover {
+      color: #333;
+    }
+
+    .form-group-editar {
+      margin-bottom: 15px;
+    }
+
+    .form-group-editar label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #555;
+      font-size: 14px;
+    }
+
+    .form-group-editar input,
+    .form-group-editar textarea {
+      width: calc(100% - 20px);
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .form-group-editar textarea {
+      resize: vertical;
+      min-height: 60px;
+      font-family: inherit;
+    }
+
+    .form-group-editar input:focus,
+    .form-group-editar textarea:focus {
+      outline: none;
+      border-color: #2196F3;
+      box-shadow: 0 0 5px rgba(33, 150, 243, 0.3);
+    }
+
+    .btn-salvar-edicao {
+      width: 100%;
+      padding: 12px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .btn-salvar-edicao:hover {
+      background-color: #45a049;
+    }
+
+    .btn-salvar-edicao:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+
     /* ========================================
        ESTILOS DA TELA DE LOGIN
        ======================================== */
@@ -856,6 +1005,43 @@
           <div class="loading-faturamento">Carregando histórico...</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EDITAR REGISTRO DE FATURAMENTO -->
+  <div id="modalEditar" class="modal-editar">
+    <div class="modal-editar-content">
+      <div class="modal-editar-header">
+        <h3>✏️ Editar Registro de Faturamento</h3>
+        <span class="close-editar" onclick="fecharModalEdicao()">&times;</span>
+      </div>
+
+      <div class="form-group-editar">
+        <label>Data:</label>
+        <input type="text" id="editData" readonly style="background-color: #f5f5f5;">
+      </div>
+
+      <div class="form-group-editar">
+        <label>Cliente:</label>
+        <input type="text" id="editCliente" readonly style="background-color: #f5f5f5;">
+      </div>
+
+      <div class="form-group-editar">
+        <label>Marca:</label>
+        <input type="text" id="editMarca" readonly style="background-color: #f5f5f5;">
+      </div>
+
+      <div class="form-group-editar">
+        <label>Novo Valor (R$):</label>
+        <input type="number" id="editValor" step="0.01" placeholder="0.00" required>
+      </div>
+
+      <div class="form-group-editar">
+        <label>Observação (motivo da correção):</label>
+        <textarea id="editObservacao" placeholder="Ex: Correção de cálculo errado, valor atualizado manualmente..."></textarea>
+      </div>
+
+      <button class="btn-salvar-edicao" onclick="salvarEdicao()">💾 Salvar Alterações</button>
     </div>
   </div>
 
@@ -1724,6 +1910,8 @@
           html += '<th>Cliente</th>';
           html += '<th>Marca</th>';
           html += '<th>Valor Faturado</th>';
+          html += '<th>Observação</th>';
+          html += '<th style="text-align:center;">Ações</th>';
           html += '</tr></thead>';
           html += '<tbody>';
 
@@ -1742,23 +1930,33 @@
 
             // Cabeçalho do dia
             html += '<tr class="data-grupo">';
-            html += '<td colspan="4">📅 ' + data + '</td>';
+            html += '<td colspan="6">📅 ' + data + '</td>';
             html += '</tr>';
 
             // Itens do dia
             itensDia.forEach(function(item) {
+              var dataEscapada = item.data.replace(/'/g, "\\'");
+              var clienteEscapado = item.cliente.replace(/'/g, "\\'");
+              var marcaEscapada = item.marca.replace(/'/g, "\\'");
+              var observacaoTexto = item.observacao || "";
+
               html += '<tr>';
               html += '<td></td>';
               html += '<td><b>' + item.cliente + '</b></td>';
               html += '<td><span class="marca-badge-faturamento">' + item.marca + '</span></td>';
               html += '<td class="valor-faturamento">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+              html += '<td class="observacao-cell">' + observacaoTexto + '</td>';
+              html += '<td style="text-align:center;">';
+              html += '<button class="btn-editar-historico" onclick="abrirModalEdicao(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\', ' + item.valor + ', \'' + observacaoTexto.replace(/'/g, "\\'") + '\')">✏️ Editar</button>';
+              html += '<button class="btn-deletar-historico" onclick="deletarRegistro(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\')">🗑️ Deletar</button>';
+              html += '</td>';
               html += '</tr>';
               totalDia += item.valor;
             });
 
             // Total do dia
             html += '<tr class="total-dia">';
-            html += '<td colspan="3"><strong>Total do dia ' + data + '</strong></td>';
+            html += '<td colspan="5"><strong>Total do dia ' + data + '</strong></td>';
             html += '<td class="valor-faturamento">R$ ' + totalDia.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
             html += '</tr>';
           });
@@ -1773,6 +1971,111 @@
             '<div class="empty-historico">❌ Erro ao carregar histórico: ' + error.message + '</div>';
         })
         .getHistoricoFaturamento();
+    }
+
+    // ========================================
+    // FUNÇÕES DE EDIÇÃO E DELEÇÃO DE REGISTROS
+    // ========================================
+
+    // Abre o modal de edição com os dados do registro
+    function abrirModalEdicao(data, cliente, marca, valor, observacao) {
+      document.getElementById('editData').value = data;
+      document.getElementById('editCliente').value = cliente;
+      document.getElementById('editMarca').value = marca;
+      document.getElementById('editValor').value = valor.toFixed(2);
+      document.getElementById('editObservacao').value = observacao || "";
+
+      document.getElementById('modalEditar').style.display = 'block';
+      addDebugLog("✏️ Abrindo edição para: " + cliente + " - " + marca + " (" + data + ")");
+    }
+
+    // Fecha o modal de edição
+    function fecharModalEdicao() {
+      document.getElementById('modalEditar').style.display = 'none';
+    }
+
+    // Salva a edição do registro
+    function salvarEdicao() {
+      var data = document.getElementById('editData').value;
+      var cliente = document.getElementById('editCliente').value;
+      var marca = document.getElementById('editMarca').value;
+      var novoValor = parseFloat(document.getElementById('editValor').value);
+      var observacao = document.getElementById('editObservacao').value.trim();
+
+      if (isNaN(novoValor) || novoValor < 0) {
+        alert("⚠️ Por favor, insira um valor válido!");
+        return;
+      }
+
+      if (!observacao) {
+        if (!confirm("Você não informou uma observação. Deseja continuar mesmo assim?")) {
+          return;
+        }
+      }
+
+      // Desabilita botão enquanto processa
+      var btnSalvar = document.querySelector('.btn-salvar-edicao');
+      btnSalvar.disabled = true;
+      btnSalvar.innerHTML = '⏳ Salvando...';
+
+      addDebugLog("💾 Salvando edição: " + data + " | " + cliente + " | " + marca + " → R$ " + novoValor.toFixed(2));
+
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          btnSalvar.disabled = false;
+          btnSalvar.innerHTML = '💾 Salvar Alterações';
+
+          if (resultado.sucesso) {
+            addDebugLog("✅ Registro editado com sucesso!", "success");
+            alert("✅ " + resultado.mensagem);
+            fecharModalEdicao();
+            carregarHistoricoFaturamento(); // Recarrega o histórico
+          } else {
+            addDebugLog("❌ Erro ao editar: " + resultado.mensagem, "error");
+            alert("❌ " + resultado.mensagem);
+          }
+        })
+        .withFailureHandler(function(error) {
+          btnSalvar.disabled = false;
+          btnSalvar.innerHTML = '💾 Salvar Alterações';
+          addDebugLog("❌ Erro ao salvar edição: " + error.message, "error");
+          alert("❌ Erro ao salvar: " + error.message);
+        })
+        .editarRegistroFaturamento(data, cliente, marca, novoValor, observacao);
+    }
+
+    // Deleta um registro
+    function deletarRegistro(data, cliente, marca) {
+      var confirmacao = confirm(
+        "⚠️ TEM CERTEZA que deseja DELETAR este registro?\n\n" +
+        "Data: " + data + "\n" +
+        "Cliente: " + cliente + "\n" +
+        "Marca: " + marca + "\n\n" +
+        "Esta ação NÃO pode ser desfeita!"
+      );
+
+      if (!confirmacao) {
+        return;
+      }
+
+      addDebugLog("🗑️ Deletando registro: " + data + " | " + cliente + " | " + marca);
+
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          if (resultado.sucesso) {
+            addDebugLog("✅ Registro deletado com sucesso!", "success");
+            alert("✅ " + resultado.mensagem);
+            carregarHistoricoFaturamento(); // Recarrega o histórico
+          } else {
+            addDebugLog("❌ Erro ao deletar: " + resultado.mensagem, "error");
+            alert("❌ " + resultado.mensagem);
+          }
+        })
+        .withFailureHandler(function(error) {
+          addDebugLog("❌ Erro ao deletar registro: " + error.message, "error");
+          alert("❌ Erro ao deletar: " + error.message);
+        })
+        .deletarRegistroFaturamento(data, cliente, marca);
     }
 
     // ========================================
