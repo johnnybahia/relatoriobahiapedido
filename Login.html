@@ -294,7 +294,9 @@
             console.log("🚀 URL de destino:", urlComToken);
 
             // Detecta se está em modo de desenvolvimento
-            var isDevMode = url.indexOf('userCodeAppPanel') > -1 || url.indexOf('googleusercontent.com') > -1;
+            // Produção tem /exec ou /macros/s/ na URL
+            var isProdMode = url.indexOf('/exec') > -1 || url.indexOf('/macros/s/') > -1;
+            var isDevMode = url.indexOf('userCodeAppPanel') > -1 || !isProdMode;
 
             var alertDiv = document.getElementById('alert');
             alertDiv.className = 'alert alert-success';
