@@ -808,80 +808,71 @@
     // FUNÇÕES DE AUTENTICAÇÃO
     // ========================================
 
-    // Extrai o token da URL
-    function extrairTokenDaURL() {
-      var urlParams = new URLSearchParams(window.location.search);
-      var token = urlParams.get('token');
-      console.log("🔑 Token extraído da URL:", token ? "Presente (" + token.substring(0, 10) + "...)" : "AUSENTE");
-      return token;
-    }
-
     // Define o nome do usuário no header
     function setarNomeUsuario(nome) {
-      document.getElementById('nomeUsuario').textContent = nome.toUpperCase();
-      usuarioLogado = nome;
+      if (nome && nome.trim()) {
+        document.getElementById('nomeUsuario').textContent = nome.toUpperCase();
+        usuarioLogado = nome;
+        console.log("✅ Usuário definido:", nome);
+      } else {
+        document.getElementById('nomeUsuario').textContent = 'USUÁRIO';
+        usuarioLogado = 'Usuário';
+        console.warn("⚠️ Nome do usuário vazio");
+      }
     }
 
     // Faz logout
     function fazerLogout() {
       if (confirm('Deseja realmente sair do sistema?')) {
+        console.log("👋 Fazendo logout...");
         addDebugLog("👋 Fazendo logout...");
 
         // Chama função do backend para invalidar token
         google.script.run
           .withSuccessHandler(function() {
-            // Redireciona para a página de login
             window.location.href = window.location.href.split('?')[0];
           })
           .withFailureHandler(function() {
-            // Mesmo com erro, redireciona
             window.location.href = window.location.href.split('?')[0];
           })
           .fazerLogout(tokenSessao);
       }
     }
 
-    // Inicializa autenticação
+    // Inicializa autenticação - SIMPLIFICADO
     function inicializarAutenticacao() {
       console.log("🔐 Iniciando autenticação...");
 
-      tokenSessao = extrairTokenDaURL();
+      // O backend já validou o token e injetou os dados via template
+      // Pegamos os dados injetados diretamente
+      try {
+        // Dados injetados pelo template do Google Apps Script
+        var nomeUsuario = "<?= usuarioLogado ?>";
+        var token = "<?= tokenSessao ?>";
 
-      if (!tokenSessao) {
-        // Sem token - redireciona para login
-        console.error("❌ Token NÃO encontrado na URL! Redirecionando para login...");
-        addDebugLog("❌ Token não encontrado - redirecionando para login");
+        console.log("📄 Dados do template - Usuário:", nomeUsuario);
+        console.log("📄 Dados do template - Token:", token ? "Presente" : "Ausente");
 
-        var loginUrl = window.location.href.split('?')[0];
-        console.log("🚪 Redirecionando para:", loginUrl);
-        window.location.href = loginUrl;
+        // Se os dados não foram injetados, redireciona para login
+        if (!nomeUsuario || nomeUsuario === "<?= usuarioLogado ?>" || nomeUsuario.trim() === "") {
+          console.error("❌ Dados não injetados pelo template! Redirecionando para login...");
+          addDebugLog("❌ Sem autenticação - redirecionando para login");
+          window.location.href = window.location.href.split('?')[0];
+          return false;
+        }
+
+        // Define token e usuário
+        tokenSessao = token;
+        setarNomeUsuario(nomeUsuario);
+        addDebugLog("✅ Autenticado como: " + nomeUsuario);
+
+        return true;
+      } catch (e) {
+        console.error("❌ Erro ao inicializar autenticação:", e);
+        addDebugLog("❌ Erro na autenticação: " + e.message);
+        window.location.href = window.location.href.split('?')[0];
         return false;
       }
-
-      console.log("✅ Token encontrado! Continuando...");
-
-      // Token presente - o backend já validou
-      // O Google Apps Script injetou o nome do usuário via template
-      try {
-        var nomeUsuario = "<?= usuarioLogado ?>";
-        console.log("👤 Nome do usuário injetado pelo template:", nomeUsuario);
-
-        if (nomeUsuario && nomeUsuario.trim() !== "" && nomeUsuario !== "<?= usuarioLogado ?>") {
-          setarNomeUsuario(nomeUsuario);
-          addDebugLog("✅ Autenticado como: " + nomeUsuario);
-          console.log("✅ Autenticado como:", nomeUsuario);
-        } else {
-          setarNomeUsuario("Usuário");
-          addDebugLog("✅ Autenticado (usuário não identificado)");
-          console.warn("⚠️ Nome do usuário não foi injetado corretamente pelo template");
-        }
-      } catch (e) {
-        setarNomeUsuario("Usuário");
-        addDebugLog("⚠️ Erro ao obter nome do usuário: " + e.message);
-        console.error("❌ Erro ao obter nome do usuário:", e);
-      }
-
-      return true;
     }
 
     // Função de Debug

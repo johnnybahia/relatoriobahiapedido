@@ -160,26 +160,42 @@ function fazerLogout(token) {
 
 // 1. O SITE (Para o ser humano ver)
 function doGet(e) {
+  Logger.log("📄 doGet chamado - URL: " + (e ? JSON.stringify(e.parameter) : "sem parâmetros"));
+
   // Verifica se há token na URL
-  var token = e.parameter.token;
+  var token = e && e.parameter ? e.parameter.token : null;
 
   if (token) {
+    Logger.log("🔑 Token recebido na URL: " + token.substring(0, 10) + "...");
+
     // Valida o token
     var validacao = validarToken(token);
+    Logger.log("✅ Validação do token: " + JSON.stringify(validacao));
 
     if (validacao.valido) {
       // Token válido - mostra a página principal
+      Logger.log("✅ Token válido! Usuário: " + validacao.usuario);
+      Logger.log("📄 Carregando Index.html para usuário: " + validacao.usuario);
+
       var template = HtmlService.createTemplateFromFile('Index');
       template.usuarioLogado = validacao.usuario;
-      template.token = token;
+      template.tokenSessao = token;
+
+      Logger.log("📄 Template configurado com usuário: " + template.usuarioLogado);
+
       return template.evaluate()
           .setTitle('Pedidos por Marca - Marfim Bahia')
           .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
           .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    } else {
+      Logger.log("❌ Token inválido ou expirado: " + validacao.mensagem);
     }
+  } else {
+    Logger.log("⚠️ Nenhum token fornecido na URL");
   }
 
   // Sem token ou token inválido - mostra página de login
+  Logger.log("🔐 Mostrando página de login");
   var template = HtmlService.createTemplateFromFile('Login');
   return template.evaluate()
       .setTitle('Login - Marfim Bahia')

@@ -279,74 +279,20 @@
       // Chama função do backend
       google.script.run
         .withSuccessHandler(function(resultado) {
-          console.log("✅ Resposta do backend:", resultado);
-
           if (resultado.sucesso) {
-            // Debug: mostra o token recebido
-            console.log("🔑 Token recebido:", resultado.token);
-            console.log("📍 URL atual:", window.location.href);
+            // Login bem-sucedido - mostra mensagem e redireciona
+            mostrarAlerta('✅ Login realizado com sucesso! Redirecionando...', 'success');
 
             // Prepara URL com token
             var url = window.location.href.split('?')[0];
-            var timestamp = new Date().getTime();
-            var urlComToken = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
+            var urlComToken = url + '?token=' + encodeURIComponent(resultado.token);
 
-            console.log("🚀 URL de destino:", urlComToken);
-
-            // Detecta se está em modo de desenvolvimento
-            // Produção tem /exec ou /macros/s/ na URL
-            var isProdMode = url.indexOf('/exec') > -1 || url.indexOf('/macros/s/') > -1;
-            var isDevMode = url.indexOf('userCodeAppPanel') > -1 || !isProdMode;
-
-            var alertDiv = document.getElementById('alert');
-            alertDiv.className = 'alert alert-success';
-
-            if (isDevMode) {
-              // Modo de desenvolvimento - apenas link clicável
-              console.warn("⚠️ Modo de desenvolvimento detectado - redirecionamento automático não funciona");
-              console.warn("⚠️ Para redirecionamento automático, implante o app e use a URL de produção (/exec)");
-
-              alertDiv.innerHTML =
-                '✅ Login realizado com sucesso!<br><br>' +
-                '<div style="background: #fff3cd; padding: 12px; border-radius: 6px; border: 1px solid #ffc107; margin: 10px 0;">' +
-                '  <strong>⚠️ Você está no modo de desenvolvimento</strong><br>' +
-                '  <small>O redirecionamento automático não funciona neste modo.</small>' +
-                '</div>' +
-                '<a href="' + urlComToken + '" style="display: block; background: #4A90E2; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; text-align: center; margin-top: 15px;">🚀 CLIQUE AQUI PARA ENTRAR</a>';
-            } else {
-              // Modo de produção - tenta redirecionamento automático
-              alertDiv.innerHTML = '✅ Login realizado com sucesso! Redirecionando...<br><br>' +
-                '<small>Se não redirecionar automaticamente, <a href="' + urlComToken + '" style="color: #2e7d32; font-weight: bold;">clique aqui</a></small>';
-
-              // Tenta múltiplas formas de redirecionar
-              setTimeout(function() {
-                console.log("🔄 Tentando redirecionar (método 1: window.location)...");
-                window.location = urlComToken;
-              }, 500);
-
-              setTimeout(function() {
-                console.log("🔄 Tentando redirecionar (método 2: window.location.href)...");
-                window.location.href = urlComToken;
-              }, 1000);
-
-              setTimeout(function() {
-                console.log("🔄 Tentando redirecionar (método 3: window.location.assign)...");
-                window.location.assign(urlComToken);
-              }, 1500);
-
-              setTimeout(function() {
-                console.log("🔄 Tentando redirecionar (método 4: top.location)...");
-                try {
-                  top.location.href = urlComToken;
-                } catch (e) {
-                  console.warn("⚠️ top.location falhou:", e.message);
-                }
-              }, 2000);
-            }
-
-            alertDiv.style.display = 'block';
-
+            // Redireciona após 500ms
+            setTimeout(function() {
+              window.location.href = urlComToken;
+            }, 500);
           } else {
+            // Login falhou
             btnLogin.disabled = false;
             btnLogin.innerHTML = 'Entrar';
             mostrarAlerta(resultado.mensagem || 'Usuário ou senha incorretos', 'error');
@@ -363,7 +309,7 @@
     function mostrarAlerta(mensagem, tipo) {
       var alert = document.getElementById('alert');
       alert.className = 'alert alert-' + tipo;
-      alert.textContent = mensagem;
+      alert.innerHTML = mensagem;
       alert.style.display = 'block';
     }
 
