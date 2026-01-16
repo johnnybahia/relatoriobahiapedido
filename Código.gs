@@ -733,9 +733,6 @@ function getUltimoFaturamento() {
   try {
     Logger.log("📊 getUltimoFaturamento: Lendo dados do histórico...");
 
-    var props = PropertiesService.getScriptProperties();
-    var timestamp = props.getProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
-
     // Data de hoje
     var dataAtual = new Date();
     var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
@@ -749,7 +746,7 @@ function getUltimoFaturamento() {
       Logger.log("⚠️ Histórico vazio ou não encontrado");
       return {
         sucesso: true,
-        timestamp: timestamp,
+        timestamp: null,
         dados: [],
         mensagem: "Nenhum faturamento detectado ainda. Aguardando primeira verificação."
       };
@@ -758,7 +755,10 @@ function getUltimoFaturamento() {
     // Lê todos os dados do histórico
     var historicoDados = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
     var dadosDodia = [];
+    var ultimaDataComDados = null;
+    var timestampUltimoRegistro = null;
 
+    // Primeiro, tenta buscar dados do dia atual
     historicoDados.forEach(function(row) {
       // Normaliza data
       var dataRegistro = row[0];
@@ -777,26 +777,98 @@ function getUltimoFaturamento() {
         dadosDodia.push({
           cliente: row[1].toString(),
           marca: row[2].toString(),
-          valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0
+          valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0,
+          data: dataRegistro
         });
+        ultimaDataComDados = dataRegistro;
+        // Pega o timestamp da coluna F (índice 5)
+        if (row[5]) {
+          timestampUltimoRegistro = row[5].toString();
+        }
       }
     });
 
-    Logger.log("✅ getUltimoFaturamento retornou " + dadosDodia.length + " registros do histórico (dia " + diaAtual + ")");
+    // Se não houver dados de hoje, busca os dados do último dia registrado
+    if (dadosDodia.length === 0) {
+      Logger.log("ℹ️ Sem dados de hoje, buscando último faturamento registrado...");
+
+      // Agrupa dados por data para encontrar a data mais recente
+      var dadosPorData = {};
+
+      historicoDados.forEach(function(row) {
+        var dataRegistro = row[0];
+        if (dataRegistro instanceof Date) {
+          var d = dataRegistro;
+          var dia = ("0" + d.getDate()).slice(-2);
+          var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+          var ano = d.getFullYear();
+          dataRegistro = dia + "/" + mes + "/" + ano;
+        } else {
+          dataRegistro = dataRegistro.toString().trim();
+        }
+
+        if (!dadosPorData[dataRegistro]) {
+          dadosPorData[dataRegistro] = [];
+        }
+
+        dadosPorData[dataRegistro].push({
+          cliente: row[1].toString(),
+          marca: row[2].toString(),
+          valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0,
+          data: dataRegistro,
+          timestamp: row[5] ? row[5].toString() : null
+        });
+      });
+
+      // Encontra a data mais recente (converte para Date para comparar)
+      var datasOrdenadas = Object.keys(dadosPorData).sort(function(a, b) {
+        var partesA = a.split('/');
+        var partesB = b.split('/');
+        var dateA = new Date(partesA[2], partesA[1] - 1, partesA[0]);
+        var dateB = new Date(partesB[2], partesB[1] - 1, partesB[0]);
+        return dateB - dateA; // Mais recente primeiro
+      });
+
+      if (datasOrdenadas.length > 0) {
+        ultimaDataComDados = datasOrdenadas[0];
+        dadosDodia = dadosPorData[ultimaDataComDados];
+
+        // Pega o timestamp do último registro dessa data
+        var ultimoRegistro = dadosDodia[dadosDodia.length - 1];
+        if (ultimoRegistro.timestamp) {
+          timestampUltimoRegistro = ultimoRegistro.timestamp;
+        }
+
+        Logger.log("📅 Exibindo dados do último faturamento: " + ultimaDataComDados + " (" + dadosDodia.length + " registros)");
+      }
+    }
+
+    Logger.log("✅ getUltimoFaturamento retornou " + dadosDodia.length + " registros");
 
     if (dadosDodia.length === 0) {
       return {
         sucesso: true,
-        timestamp: timestamp,
+        timestamp: null,
         dados: [],
-        mensagem: "Nenhum faturamento detectado hoje."
+        mensagem: "Nenhum faturamento registrado no histórico."
       };
+    }
+
+    // Formata o timestamp para exibição
+    var timestampExibicao = timestampUltimoRegistro || ultimaDataComDados;
+
+    // Indica se está mostrando dados de hoje ou histórico
+    var ehHoje = ultimaDataComDados === diaAtual;
+    if (!ehHoje && ultimaDataComDados) {
+      timestampExibicao = "Último faturamento em " + ultimaDataComDados;
     }
 
     return {
       sucesso: true,
-      timestamp: timestamp,
-      dados: dadosDodia
+      timestamp: timestampExibicao,
+      dados: dadosDodia,
+      ehHoje: ehHoje,
+      dataExibida: ultimaDataComDados
     };
 
   } catch (erro) {
