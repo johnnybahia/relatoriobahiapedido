@@ -1810,14 +1810,9 @@
             return;
           }
 
-          // Atualiza o timestamp com indicação se é de hoje ou histórico
+          // Atualiza o timestamp
           if (resultado.timestamp) {
-            var timestampTexto = resultado.timestamp;
-            // Se não começar com "Último faturamento em", adiciona o prefixo padrão
-            if (!timestampTexto.startsWith('Último faturamento em')) {
-              timestampTexto = 'Último faturamento: ' + timestampTexto;
-            }
-            document.getElementById('timestampFaturamento').textContent = timestampTexto;
+            document.getElementById('timestampFaturamento').textContent = resultado.timestamp;
           } else {
             document.getElementById('timestampFaturamento').textContent = 'Aguardando primeira verificação';
           }
@@ -1829,16 +1824,7 @@
             return;
           }
 
-          var html = '';
-
-          // Adiciona aviso visual se não for de hoje
-          if (resultado.ehHoje === false && resultado.dataExibida) {
-            html += '<div style="background-color: #fff3cd; color: #856404; padding: 8px; margin-bottom: 10px; border-radius: 4px; font-size: 12px; text-align: center;">';
-            html += '⚠️ Exibindo dados de ' + resultado.dataExibida + ' (nenhum faturamento hoje ainda)';
-            html += '</div>';
-          }
-
-          html += '<table class="table-faturamento">';
+          var html = '<table class="table-faturamento">';
           html += '<thead><tr><th>Cliente</th><th>Marca</th><th>Valor Faturado</th></tr></thead>';
           html += '<tbody>';
 

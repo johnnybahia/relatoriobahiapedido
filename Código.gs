@@ -855,12 +855,19 @@ function getUltimoFaturamento() {
     }
 
     // Formata o timestamp para exibição
-    var timestampExibicao = timestampUltimoRegistro || ultimaDataComDados;
-
-    // Indica se está mostrando dados de hoje ou histórico
     var ehHoje = ultimaDataComDados === diaAtual;
-    if (!ehHoje && ultimaDataComDados) {
-      timestampExibicao = "Último faturamento em " + ultimaDataComDados;
+    var timestampExibicao;
+
+    if (ehHoje) {
+      // É de hoje - mostra timestamp ou "hoje"
+      if (timestampUltimoRegistro) {
+        timestampExibicao = "Faturamento de hoje: " + timestampUltimoRegistro;
+      } else {
+        timestampExibicao = "Faturamento de hoje";
+      }
+    } else {
+      // É histórico - mostra a data
+      timestampExibicao = "Faturamento de " + ultimaDataComDados;
     }
 
     return {
