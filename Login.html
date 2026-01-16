@@ -9,7 +9,7 @@
 
   <style>
     :root {
-      --primary-color: #d32f2f; /* Vermelho Marfim */
+      --primary-color: #4A90E2; /* Azul suave */
       --dark-bg: #2c3e50;
       --light-bg: #f4f6f8;
     }
@@ -22,7 +22,7 @@
 
     body {
       font-family: 'Roboto', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #f5f5f5;
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -33,7 +33,7 @@
     .login-container {
       background: white;
       border-radius: 12px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
       width: 100%;
       max-width: 420px;
       overflow: hidden;
@@ -52,10 +52,11 @@
     }
 
     .login-header {
-      background-color: var(--primary-color);
+      background-color: white;
+      border-bottom: 2px solid #e0e0e0;
       padding: 40px 30px;
       text-align: center;
-      color: white;
+      color: #333;
     }
 
     .logo {
@@ -120,7 +121,7 @@
     .form-group input:focus {
       outline: none;
       border-color: var(--primary-color);
-      box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.1);
+      box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
     }
 
     .btn-login {
@@ -138,9 +139,9 @@
     }
 
     .btn-login:hover {
-      background-color: #b71c1c;
+      background-color: #357ABD;
       transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(211, 47, 47, 0.3);
+      box-shadow: 0 5px 15px rgba(74, 144, 226, 0.3);
     }
 
     .btn-login:active {
@@ -169,9 +170,9 @@
     }
 
     .alert-error {
-      background-color: #ffebee;
-      color: #c62828;
-      border: 1px solid #ef9a9a;
+      background-color: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
     }
 
     .alert-success {
@@ -281,42 +282,48 @@
           console.log("✅ Resposta do backend:", resultado);
 
           if (resultado.sucesso) {
-            mostrarAlerta('Login realizado com sucesso! Redirecionando...', 'success');
-
             // Debug: mostra o token recebido
             console.log("🔑 Token recebido:", resultado.token);
             console.log("📍 URL atual:", window.location.href);
 
-            // Redireciona para a página principal com o token
+            // Prepara URL com token
+            var url = window.location.href.split('?')[0];
+            var timestamp = new Date().getTime();
+            var urlComToken = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
+
+            console.log("🚀 URL de destino:", urlComToken);
+
+            // Atualiza a mensagem com link clicável
+            var alertDiv = document.getElementById('alert');
+            alertDiv.className = 'alert alert-success';
+            alertDiv.innerHTML = '✅ Login realizado com sucesso! Redirecionando...<br><br>' +
+              '<small>Se não redirecionar automaticamente, <a href="' + urlComToken + '" style="color: #2e7d32; font-weight: bold;">clique aqui</a></small>';
+            alertDiv.style.display = 'block';
+
+            // Tenta múltiplas formas de redirecionar
             setTimeout(function() {
-              try {
-                // Tenta obter a URL base (sem parâmetros)
-                var url = window.location.href.split('?')[0];
+              console.log("🔄 Tentando redirecionar (método 1: window.location)...");
+              window.location = urlComToken;
+            }, 500);
 
-                // Adiciona token e timestamp para evitar cache
-                var timestamp = new Date().getTime();
-                var urlComToken = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
-
-                console.log("🚀 Redirecionando para:", urlComToken);
-
-                // Detecta se está na URL de desenvolvimento (userCodeAppPanel)
-                if (url.indexOf('userCodeAppPanel') > -1) {
-                  console.warn("⚠️ ATENÇÃO: Você está usando a URL de desenvolvimento!");
-                  console.warn("⚠️ Para melhor funcionamento, implante o app e use a URL de produção (/exec)");
-                  // Para URL de desenvolvimento, força reload com href
-                  window.location.href = urlComToken;
-                } else {
-                  // Para URL de produção, usa replace()
-                  window.location.replace(urlComToken);
-                }
-              } catch (e) {
-                console.error("❌ Erro no redirecionamento:", e);
-                // Fallback: força href em qualquer caso
-                var url = window.location.href.split('?')[0];
-                var timestamp = new Date().getTime();
-                window.location.href = url + '?token=' + encodeURIComponent(resultado.token) + '&_t=' + timestamp;
-              }
+            setTimeout(function() {
+              console.log("🔄 Tentando redirecionar (método 2: window.location.href)...");
+              window.location.href = urlComToken;
             }, 1000);
+
+            setTimeout(function() {
+              console.log("🔄 Tentando redirecionar (método 3: window.location.assign)...");
+              window.location.assign(urlComToken);
+            }, 1500);
+
+            setTimeout(function() {
+              console.log("🔄 Tentando redirecionar (método 4: top.location)...");
+              try {
+                top.location.href = urlComToken;
+              } catch (e) {
+                console.warn("⚠️ top.location falhou:", e.message);
+              }
+            }, 2000);
 
           } else {
             btnLogin.disabled = false;

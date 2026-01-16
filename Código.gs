@@ -601,8 +601,10 @@ function getFaturamentoDia() {
       return b.valor - a.valor;
     });
 
-    // IMPORTANTE: Atualiza snapshot APENAS quando chamado via trigger
-    // Para preservar o faturamento até a próxima verificação programada
+    // CORREÇÃO CRÍTICA: Atualiza snapshot SOMENTE via trigger, nunca via webapp
+    // Isso evita que chamadas manuais destruam a detecção de faturamento
+    // O snapshot só deve ser atualizado DEPOIS que o faturamento foi processado
+    Logger.log("📸 Atualizando snapshot após detecção de faturamento...");
     props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
     props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
 
