@@ -846,13 +846,39 @@ function getHistoricoFaturamento() {
     var historico = [];
 
     dados.forEach(function(row) {
+      // Formata timestamp se vier como Date object
+      var timestampFormatado = row[5];
+      if (row[5] instanceof Date) {
+        var d = row[5];
+        var dia = ("0" + d.getDate()).slice(-2);
+        var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+        var ano = d.getFullYear();
+        var hora = ("0" + d.getHours()).slice(-2);
+        var minuto = ("0" + d.getMinutes()).slice(-2);
+        timestampFormatado = dia + "/" + mes + "/" + ano + " às " + hora + ":" + minuto;
+      } else {
+        timestampFormatado = row[5] ? row[5].toString() : "";
+      }
+
+      // Formata data se vier como Date object
+      var dataFormatada = row[0];
+      if (row[0] instanceof Date) {
+        var d = row[0];
+        var dia = ("0" + d.getDate()).slice(-2);
+        var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+        var ano = d.getFullYear();
+        dataFormatada = dia + "/" + mes + "/" + ano;
+      } else {
+        dataFormatada = row[0] ? row[0].toString() : "";
+      }
+
       historico.push({
-        data: row[0].toString(),
+        data: dataFormatada,
         cliente: row[1].toString(),
         marca: row[2].toString(),
         valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0,
-        observacao: row[4] ? row[4].toString() : "", // Nova coluna
-        timestamp: row[5].toString()
+        observacao: row[4] ? row[4].toString() : "",
+        timestamp: timestampFormatado
       });
     });
 
