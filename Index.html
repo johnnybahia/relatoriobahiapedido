@@ -534,11 +534,13 @@
     .modal-body-historico {
       padding: 20px;
       overflow-y: auto;
+      overflow-x: auto; /* Permite scroll horizontal */
       flex: 1;
     }
 
     .historico-tabela {
       width: 100%;
+      min-width: 1000px; /* Garante largura mínima para mostrar todas colunas */
       border-collapse: collapse;
       margin-top: 10px;
     }
@@ -2030,6 +2032,7 @@
             alert("✅ " + resultado.mensagem);
             fecharModalEdicao();
             carregarHistoricoFaturamento(); // Recarrega o histórico
+            carregarFaturamentoDia(); // Atualiza o card visual
           } else {
             addDebugLog("❌ Erro ao editar: " + resultado.mensagem, "error");
             alert("❌ " + resultado.mensagem);
@@ -2066,6 +2069,7 @@
             addDebugLog("✅ Registro deletado com sucesso!", "success");
             alert("✅ " + resultado.mensagem);
             carregarHistoricoFaturamento(); // Recarrega o histórico
+            carregarFaturamentoDia(); // Atualiza o card visual
           } else {
             addDebugLog("❌ Erro ao deletar: " + resultado.mensagem, "error");
             alert("❌ " + resultado.mensagem);
