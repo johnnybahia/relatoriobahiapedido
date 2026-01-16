@@ -1810,8 +1810,9 @@
             return;
           }
 
+          // Atualiza o timestamp
           if (resultado.timestamp) {
-            document.getElementById('timestampFaturamento').textContent = 'Último faturamento: ' + resultado.timestamp;
+            document.getElementById('timestampFaturamento').textContent = resultado.timestamp;
           } else {
             document.getElementById('timestampFaturamento').textContent = 'Aguardando primeira verificação';
           }
