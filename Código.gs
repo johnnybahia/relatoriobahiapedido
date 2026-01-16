@@ -746,10 +746,10 @@ function salvarFaturamentoNoHistorico(dados, data) {
     if (!sheet) {
       Logger.log("📋 Criando aba 'HistoricoFaturamento'...");
       sheet = doc.insertSheet("HistoricoFaturamento");
-      // Adiciona cabeçalho
-      sheet.appendRow(["Data", "Cliente", "Marca", "Valor Faturado", "Timestamp"]);
+      // Adiciona cabeçalho (com coluna Observação)
+      sheet.appendRow(["Data", "Cliente", "Marca", "Valor Faturado", "Observação", "Timestamp"]);
       // Formata cabeçalho
-      var headerRange = sheet.getRange(1, 1, 1, 5);
+      var headerRange = sheet.getRange(1, 1, 1, 6);
       headerRange.setBackground("#d32f2f");
       headerRange.setFontColor("#FFFFFF");
       headerRange.setFontWeight("bold");
@@ -791,13 +791,14 @@ function salvarFaturamentoNoHistorico(dados, data) {
         item.cliente,
         item.marca,
         item.valor,
+        "", // Observação vazia (será preenchida manualmente se necessário)
         timestamp
       ]);
     });
 
     if (novasLinhas.length > 0) {
       var ultimaLinha = sheet.getLastRow();
-      sheet.getRange(ultimaLinha + 1, 1, novasLinhas.length, 5).setValues(novasLinhas);
+      sheet.getRange(ultimaLinha + 1, 1, novasLinhas.length, 6).setValues(novasLinhas);
 
       // Formata valores como moeda
       var valorRange = sheet.getRange(ultimaLinha + 1, 4, novasLinhas.length, 1);
@@ -839,8 +840,8 @@ function getHistoricoFaturamento() {
       };
     }
 
-    // Lê todos os dados (pula cabeçalho)
-    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    // Lê todos os dados (pula cabeçalho) - agora com 6 colunas incluindo Observação
+    var dados = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
 
     var historico = [];
 
@@ -850,7 +851,8 @@ function getHistoricoFaturamento() {
         cliente: row[1].toString(),
         marca: row[2].toString(),
         valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0,
-        timestamp: row[4].toString()
+        observacao: row[4] ? row[4].toString() : "", // Nova coluna
+        timestamp: row[5].toString()
       });
     });
 
@@ -1103,4 +1105,154 @@ function verificarTamanhoAbas() {
 
   Logger.log("\n" + "=".repeat(50));
   Logger.log("✅ Verificação concluída!");
+}
+
+/**
+ * ========================================
+ * FUNÇÕES PARA EDIÇÃO MANUAL DE FATURAMENTO
+ * ========================================
+ */
+
+/**
+ * Edita um registro específico de faturamento
+ * @param {string} data - Data do registro (DD/MM/AAAA)
+ * @param {string} cliente - Nome do cliente
+ * @param {string} marca - Marca
+ * @param {number} novoValor - Novo valor corrigido
+ * @param {string} observacao - Observação sobre o ajuste
+ * @returns {Object} Resultado da operação
+ */
+function editarRegistroFaturamento(data, cliente, marca, novoValor, observacao) {
+  try {
+    Logger.log("✏️ Editando registro: " + data + " | " + cliente + " | " + marca);
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+
+    if (!sheet) {
+      return {
+        sucesso: false,
+        mensagem: "Aba 'HistoricoFaturamento' não encontrada"
+      };
+    }
+
+    var lastRow = sheet.getLastRow();
+
+    if (lastRow < 2) {
+      return {
+        sucesso: false,
+        mensagem: "Nenhum registro encontrado no histórico"
+      };
+    }
+
+    // Busca o registro
+    var dados = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+    var registroEncontrado = false;
+    var linhaParaEditar = -1;
+
+    for (var i = 0; i < dados.length; i++) {
+      if (dados[i][0].toString() === data &&
+          dados[i][1].toString() === cliente &&
+          dados[i][2].toString() === marca) {
+        linhaParaEditar = i + 2; // +2 porque array começa em 0 e pula cabeçalho
+        registroEncontrado = true;
+        break;
+      }
+    }
+
+    if (!registroEncontrado) {
+      return {
+        sucesso: false,
+        mensagem: "Registro não encontrado"
+      };
+    }
+
+    // Atualiza o valor e observação
+    sheet.getRange(linhaParaEditar, 4).setValue(novoValor); // Coluna D: Valor
+    sheet.getRange(linhaParaEditar, 5).setValue(observacao); // Coluna E: Observação
+
+    // Formata valor como moeda
+    sheet.getRange(linhaParaEditar, 4).setNumberFormat("R$ #,##0.00");
+
+    Logger.log("✅ Registro editado com sucesso!");
+
+    return {
+      sucesso: true,
+      mensagem: "Registro atualizado com sucesso!"
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao editar registro: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro ao editar: " + erro.message
+    };
+  }
+}
+
+/**
+ * Deleta um registro específico de faturamento
+ * @param {string} data - Data do registro (DD/MM/AAAA)
+ * @param {string} cliente - Nome do cliente
+ * @param {string} marca - Marca
+ * @returns {Object} Resultado da operação
+ */
+function deletarRegistroFaturamento(data, cliente, marca) {
+  try {
+    Logger.log("🗑️ Deletando registro: " + data + " | " + cliente + " | " + marca);
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+
+    if (!sheet) {
+      return {
+        sucesso: false,
+        mensagem: "Aba 'HistoricoFaturamento' não encontrada"
+      };
+    }
+
+    var lastRow = sheet.getLastRow();
+
+    if (lastRow < 2) {
+      return {
+        sucesso: false,
+        mensagem: "Nenhum registro encontrado no histórico"
+      };
+    }
+
+    // Busca o registro
+    var dados = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+    var linhaParaDeletar = -1;
+
+    for (var i = 0; i < dados.length; i++) {
+      if (dados[i][0].toString() === data &&
+          dados[i][1].toString() === cliente &&
+          dados[i][2].toString() === marca) {
+        linhaParaDeletar = i + 2; // +2 porque array começa em 0 e pula cabeçalho
+        break;
+      }
+    }
+
+    if (linhaParaDeletar === -1) {
+      return {
+        sucesso: false,
+        mensagem: "Registro não encontrado"
+      };
+    }
+
+    // Deleta a linha
+    sheet.deleteRow(linhaParaDeletar);
+
+    Logger.log("✅ Registro deletado com sucesso!");
+
+    return {
+      sucesso: true,
+      mensagem: "Registro deletado com sucesso!"
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao deletar registro: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro ao deletar: " + erro.message
+    };
+  }
 }
