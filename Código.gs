@@ -1175,20 +1175,46 @@ function editarRegistroFaturamento(data, cliente, marca, novoValor, observacao) 
     var registroEncontrado = false;
     var linhaParaEditar = -1;
 
+    // Normaliza os valores de busca
+    var dataBusca = data.trim();
+    var clienteBusca = cliente.trim().toUpperCase();
+    var marcaBusca = marca.trim().toUpperCase();
+
+    Logger.log("🔍 Buscando: Data=" + dataBusca + " | Cliente=" + clienteBusca + " | Marca=" + marcaBusca);
+
     for (var i = 0; i < dados.length; i++) {
-      if (dados[i][0].toString() === data &&
-          dados[i][1].toString() === cliente &&
-          dados[i][2].toString() === marca) {
+      // Normaliza a data da planilha
+      var dataPlanilha = dados[i][0];
+      if (dataPlanilha instanceof Date) {
+        var d = dataPlanilha;
+        var dia = ("0" + d.getDate()).slice(-2);
+        var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+        var ano = d.getFullYear();
+        dataPlanilha = dia + "/" + mes + "/" + ano;
+      } else {
+        dataPlanilha = dataPlanilha.toString().trim();
+      }
+
+      var clientePlanilha = dados[i][1] ? dados[i][1].toString().trim().toUpperCase() : "";
+      var marcaPlanilha = dados[i][2] ? dados[i][2].toString().trim().toUpperCase() : "";
+
+      Logger.log("📋 Linha " + (i+2) + ": Data=" + dataPlanilha + " | Cliente=" + clientePlanilha + " | Marca=" + marcaPlanilha);
+
+      if (dataPlanilha === dataBusca &&
+          clientePlanilha === clienteBusca &&
+          marcaPlanilha === marcaBusca) {
         linhaParaEditar = i + 2; // +2 porque array começa em 0 e pula cabeçalho
         registroEncontrado = true;
+        Logger.log("✅ Registro encontrado na linha " + linhaParaEditar);
         break;
       }
     }
 
     if (!registroEncontrado) {
+      Logger.log("❌ Registro NÃO encontrado após buscar " + dados.length + " linhas");
       return {
         sucesso: false,
-        mensagem: "Registro não encontrado"
+        mensagem: "Registro não encontrado. Data: " + dataBusca + ", Cliente: " + clienteBusca + ", Marca: " + marcaBusca
       };
     }
 
@@ -1248,19 +1274,43 @@ function deletarRegistroFaturamento(data, cliente, marca) {
     var dados = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
     var linhaParaDeletar = -1;
 
+    // Normaliza os valores de busca
+    var dataBusca = data.trim();
+    var clienteBusca = cliente.trim().toUpperCase();
+    var marcaBusca = marca.trim().toUpperCase();
+
+    Logger.log("🔍 Buscando para deletar: Data=" + dataBusca + " | Cliente=" + clienteBusca + " | Marca=" + marcaBusca);
+
     for (var i = 0; i < dados.length; i++) {
-      if (dados[i][0].toString() === data &&
-          dados[i][1].toString() === cliente &&
-          dados[i][2].toString() === marca) {
+      // Normaliza a data da planilha
+      var dataPlanilha = dados[i][0];
+      if (dataPlanilha instanceof Date) {
+        var d = dataPlanilha;
+        var dia = ("0" + d.getDate()).slice(-2);
+        var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+        var ano = d.getFullYear();
+        dataPlanilha = dia + "/" + mes + "/" + ano;
+      } else {
+        dataPlanilha = dataPlanilha.toString().trim();
+      }
+
+      var clientePlanilha = dados[i][1] ? dados[i][1].toString().trim().toUpperCase() : "";
+      var marcaPlanilha = dados[i][2] ? dados[i][2].toString().trim().toUpperCase() : "";
+
+      if (dataPlanilha === dataBusca &&
+          clientePlanilha === clienteBusca &&
+          marcaPlanilha === marcaBusca) {
         linhaParaDeletar = i + 2; // +2 porque array começa em 0 e pula cabeçalho
+        Logger.log("✅ Registro encontrado na linha " + linhaParaDeletar);
         break;
       }
     }
 
     if (linhaParaDeletar === -1) {
+      Logger.log("❌ Registro NÃO encontrado após buscar " + dados.length + " linhas");
       return {
         sucesso: false,
-        mensagem: "Registro não encontrado"
+        mensagem: "Registro não encontrado. Data: " + dataBusca + ", Cliente: " + clienteBusca + ", Marca: " + marcaBusca
       };
     }
 
