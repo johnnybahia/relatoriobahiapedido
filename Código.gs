@@ -727,29 +727,76 @@ function getFaturamentoDia() {
 
 /**
  * Retorna o último faturamento detectado (para exibir na webapp)
- * Esta função NÃO recalcula, apenas retorna o que foi salvo
+ * ATUALIZADO: Agora lê do HISTÓRICO (inclui edições manuais)
  */
 function getUltimoFaturamento() {
   try {
+    Logger.log("📊 getUltimoFaturamento: Lendo dados do histórico...");
+
     var props = PropertiesService.getScriptProperties();
-    var ultimoFaturamento = props.getProperty('ULTIMO_FATURAMENTO');
     var timestamp = props.getProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
 
-    if (!ultimoFaturamento) {
+    // Data de hoje
+    var dataAtual = new Date();
+    var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
+                   ("0" + (dataAtual.getMonth() + 1)).slice(-2) + "/" +
+                   dataAtual.getFullYear();
+
+    // Lê dados REAIS do histórico (incluindo edições manuais)
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+
+    if (!sheet || sheet.getLastRow() < 2) {
+      Logger.log("⚠️ Histórico vazio ou não encontrado");
       return {
         sucesso: true,
-        timestamp: null,
+        timestamp: timestamp,
         dados: [],
         mensagem: "Nenhum faturamento detectado ainda. Aguardando primeira verificação."
       };
     }
 
-    var dados = JSON.parse(ultimoFaturamento);
+    // Lê todos os dados do histórico
+    var historicoDados = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
+    var dadosDodia = [];
+
+    historicoDados.forEach(function(row) {
+      // Normaliza data
+      var dataRegistro = row[0];
+      if (dataRegistro instanceof Date) {
+        var d = dataRegistro;
+        var dia = ("0" + d.getDate()).slice(-2);
+        var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+        var ano = d.getFullYear();
+        dataRegistro = dia + "/" + mes + "/" + ano;
+      } else {
+        dataRegistro = dataRegistro.toString().trim();
+      }
+
+      // Se é o dia de hoje
+      if (dataRegistro === diaAtual) {
+        dadosDodia.push({
+          cliente: row[1].toString(),
+          marca: row[2].toString(),
+          valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0
+        });
+      }
+    });
+
+    Logger.log("✅ getUltimoFaturamento retornou " + dadosDodia.length + " registros do histórico (dia " + diaAtual + ")");
+
+    if (dadosDodia.length === 0) {
+      return {
+        sucesso: true,
+        timestamp: timestamp,
+        dados: [],
+        mensagem: "Nenhum faturamento detectado hoje."
+      };
+    }
 
     return {
       sucesso: true,
       timestamp: timestamp,
-      dados: dados
+      dados: dadosDodia
     };
 
   } catch (erro) {
