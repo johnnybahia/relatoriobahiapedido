@@ -589,9 +589,75 @@
       color: #999;
       font-size: 14px;
     }
+
+    /* ========================================
+       ESTILOS DA TELA DE LOGIN
+       ======================================== */
+    #login-container {
+      width: 90%;
+      max-width: 400px;
+      margin: 50px auto;
+      padding: 30px;
+      background-color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .login-logo {
+      max-width: 250px;
+      height: auto;
+      margin-bottom: 20px;
+    }
+    #login-container h2 {
+      color: #333;
+      margin-bottom: 25px;
+    }
+    #login-container input {
+      width: calc(100% - 20px);
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #login-container button {
+      width: 100%;
+      padding: 12px;
+      background-color: #d32f2f;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    #login-container button:hover {
+      background-color: #b71c1c;
+    }
+    #login-error {
+      color: #d32f2f;
+      margin-top: 15px;
+      font-size: 0.9em;
+    }
+    #main-app-container {
+      display: none; /* Oculto inicialmente */
+    }
   </style>
 </head>
 <body>
+
+  <!-- TELA DE LOGIN -->
+  <div id="login-container">
+    <img src="https://i.ibb.co/FGGjdsM/LOGO-MARFIM.jpg" alt="Logo MARFIM" class="login-logo">
+    <h2>Pedidos por Marca</h2>
+
+    <input type="text" id="usuario" placeholder="Usuário" autocomplete="username">
+    <input type="password" id="senha" placeholder="Senha" autocomplete="current-password">
+    <button onclick="fazerLogin()">Entrar</button>
+
+    <div id="login-error" style="display:none;">Usuário ou senha inválidos.</div>
+  </div>
+
+  <!-- APP PRINCIPAL (oculto inicialmente) -->
+  <div id="main-app-container">
 
   <div class="header">
     <div class="header-left">
@@ -793,6 +859,8 @@
     </div>
   </div>
 
+  </div> <!-- Fecha #main-app-container -->
+
   <script>
     // Log inicial para confirmar que o script está carregando
     console.log("🎯 Index.html carregado!");
@@ -801,87 +869,71 @@
 
     var dadosBrutos = []; // Variável global segura
     var linhasFiltradas = []; // Para exportação CSV
-    var tokenSessao = ""; // Token de autenticação
-    var usuarioLogado = ""; // Nome do usuário logado
+    var usuarioLogado = { nome: "" }; // Objeto com dados do usuário logado
 
     // ========================================
-    // FUNÇÕES DE AUTENTICAÇÃO
+    // FUNÇÕES DE AUTENTICAÇÃO (SPA - SEM TOKENS)
     // ========================================
 
-    // Extrai o token da URL
-    function extrairTokenDaURL() {
-      var urlParams = new URLSearchParams(window.location.search);
-      var token = urlParams.get('token');
-      console.log("🔑 Token extraído da URL:", token ? "Presente (" + token.substring(0, 10) + "...)" : "AUSENTE");
-      return token;
+    // Faz login
+    function fazerLogin() {
+      var usuario = document.getElementById("usuario").value.trim();
+      var senha = document.getElementById("senha").value.trim();
+      var msgErro = document.getElementById("login-error");
+
+      if (!usuario || !senha) {
+        msgErro.innerHTML = "Por favor, preencha usuário e senha.";
+        msgErro.style.display = "block";
+        return;
+      }
+
+      document.querySelector("#login-container button").disabled = true;
+      document.querySelector("#login-container button").innerHTML = "Aguarde...";
+      msgErro.style.display = "none";
+
+      google.script.run
+        .withSuccessHandler(onLoginSuccess)
+        .withFailureHandler(onLoginFailure)
+        .verificarLogin(usuario, senha);
     }
 
-    // Define o nome do usuário no header
-    function setarNomeUsuario(nome) {
-      document.getElementById('nomeUsuario').textContent = nome.toUpperCase();
-      usuarioLogado = nome;
+    function onLoginSuccess(resultado) {
+      if (resultado.status === "sucesso") {
+        // Login bem-sucedido
+        usuarioLogado.nome = resultado.nome;
+
+        // Esconde tela de login
+        document.getElementById("login-container").style.display = "none";
+
+        // Mostra app principal
+        document.getElementById("main-app-container").style.display = "block";
+
+        // Define nome do usuário no header
+        document.getElementById("nomeUsuario").textContent = resultado.nome.toUpperCase();
+
+        // Inicia carregamento dos dados
+        console.log("✅ Login bem-sucedido! Carregando dados...");
+        addDebugLog("✅ Autenticado como: " + resultado.nome);
+        carregarDadosPlanilha();
+      } else {
+        onLoginFailure(resultado.mensagem || "Erro desconhecido");
+      }
+    }
+
+    function onLoginFailure(erro) {
+      var msgErro = document.getElementById("login-error");
+      msgErro.innerHTML = erro;
+      msgErro.style.display = "block";
+      document.querySelector("#login-container button").disabled = false;
+      document.querySelector("#login-container button").innerHTML = "Entrar";
     }
 
     // Faz logout
     function fazerLogout() {
       if (confirm('Deseja realmente sair do sistema?')) {
-        addDebugLog("👋 Fazendo logout...");
-
-        // Chama função do backend para invalidar token
-        google.script.run
-          .withSuccessHandler(function() {
-            // Redireciona para a página de login
-            window.location.href = window.location.href.split('?')[0];
-          })
-          .withFailureHandler(function() {
-            // Mesmo com erro, redireciona
-            window.location.href = window.location.href.split('?')[0];
-          })
-          .fazerLogout(tokenSessao);
+        // Simplesmente recarrega a página (volta para tela de login)
+        window.location.reload();
       }
-    }
-
-    // Inicializa autenticação
-    function inicializarAutenticacao() {
-      console.log("🔐 Iniciando autenticação...");
-
-      tokenSessao = extrairTokenDaURL();
-
-      if (!tokenSessao) {
-        // Sem token - redireciona para login
-        console.error("❌ Token NÃO encontrado na URL! Redirecionando para login...");
-        addDebugLog("❌ Token não encontrado - redirecionando para login");
-
-        var loginUrl = window.location.href.split('?')[0];
-        console.log("🚪 Redirecionando para:", loginUrl);
-        window.location.href = loginUrl;
-        return false;
-      }
-
-      console.log("✅ Token encontrado! Continuando...");
-
-      // Token presente - o backend já validou
-      // O Google Apps Script injetou o nome do usuário via template
-      try {
-        var nomeUsuario = "<?= usuarioLogado ?>";
-        console.log("👤 Nome do usuário injetado pelo template:", nomeUsuario);
-
-        if (nomeUsuario && nomeUsuario.trim() !== "" && nomeUsuario !== "<?= usuarioLogado ?>") {
-          setarNomeUsuario(nomeUsuario);
-          addDebugLog("✅ Autenticado como: " + nomeUsuario);
-          console.log("✅ Autenticado como:", nomeUsuario);
-        } else {
-          setarNomeUsuario("Usuário");
-          addDebugLog("✅ Autenticado (usuário não identificado)");
-          console.warn("⚠️ Nome do usuário não foi injetado corretamente pelo template");
-        }
-      } catch (e) {
-        setarNomeUsuario("Usuário");
-        addDebugLog("⚠️ Erro ao obter nome do usuário: " + e.message);
-        console.error("❌ Erro ao obter nome do usuário:", e);
-      }
-
-      return true;
     }
 
     // Função de Debug
@@ -908,11 +960,21 @@
 
     // Inicia quando a página carrega
     window.onload = function() {
-      // Primeiro, inicializa autenticação
-      if (!inicializarAutenticacao()) {
-        return; // Se falhar, já redirecionou para login
-      }
+      // A página inicia na tela de login
+      // O carregamento dos dados só acontece após login bem-sucedido
+      console.log("✅ Aplicação iniciada. Aguardando login...");
 
+      // Permite login com Enter nos campos
+      document.getElementById("usuario").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") fazerLogin();
+      });
+      document.getElementById("senha").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") fazerLogin();
+      });
+    };
+
+    // Função para carregar dados da planilha (chamada após login)
+    function carregarDadosPlanilha() {
       addDebugLog("🚀 Iniciando carregamento de dados...");
 
       google.script.run
@@ -923,7 +985,7 @@
         })
         .withSuccessHandler(processarDadosIniciais)
         .getDadosPlanilha();
-    };
+    }
 
     function processarDadosIniciais(dados) {
       // 1. Blindagem contra Nulos

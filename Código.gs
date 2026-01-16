@@ -6,6 +6,7 @@
 
 /**
  * Verifica login contra a aba "senha" da planilha
+ * VERSÃO SIMPLIFICADA SPA (sem tokens)
  * @param {string} usuario - Nome de usuário
  * @param {string} senha - Senha
  * @returns {Object} Resultado da verificação
@@ -19,7 +20,7 @@ function verificarLogin(usuario, senha) {
     if (!sheet) {
       Logger.log("❌ Aba 'senha' não encontrada!");
       return {
-        sucesso: false,
+        status: "erro",
         mensagem: "Erro de configuração do sistema"
       };
     }
@@ -29,7 +30,7 @@ function verificarLogin(usuario, senha) {
     if (lastRow < 2) {
       Logger.log("❌ Nenhum usuário cadastrado");
       return {
-        sucesso: false,
+        status: "erro",
         mensagem: "Nenhum usuário cadastrado"
       };
     }
@@ -48,29 +49,26 @@ function verificarLogin(usuario, senha) {
       if (usuarioNaAba === usuarioDigitado && senhaNaAba === senhaDigitada) {
         Logger.log("✅ Login bem-sucedido para: " + usuario);
 
-        // Gera token de sessão
-        var token = gerarTokenSessao(usuario);
-
+        // Retorna sucesso com nome do usuário (SEM TOKEN)
         return {
-          sucesso: true,
-          mensagem: "Login realizado com sucesso!",
-          usuario: usuario,
-          token: token
+          status: "sucesso",
+          nome: usuario,
+          mensagem: "Login realizado com sucesso!"
         };
       }
     }
 
     Logger.log("❌ Credenciais inválidas para: " + usuario);
     return {
-      sucesso: false,
+      status: "erro",
       mensagem: "Usuário ou senha incorretos"
     };
 
   } catch (erro) {
     Logger.log("❌ Erro ao verificar login: " + erro.toString());
     return {
-      sucesso: false,
-      mensagem: "Erro ao verificar credenciais"
+      status: "erro",
+      mensagem: "Erro ao verificar credenciais: " + erro.message
     };
   }
 }
@@ -159,30 +157,13 @@ function fazerLogout(token) {
 }
 
 // 1. O SITE (Para o ser humano ver)
+// VERSÃO SIMPLIFICADA SPA - Sempre serve Index.html
 function doGet(e) {
-  // Verifica se há token na URL
-  var token = e.parameter.token;
+  Logger.log("📄 doGet chamado - Servindo Index.html (SPA)");
 
-  if (token) {
-    // Valida o token
-    var validacao = validarToken(token);
-
-    if (validacao.valido) {
-      // Token válido - mostra a página principal
-      var template = HtmlService.createTemplateFromFile('Index');
-      template.usuarioLogado = validacao.usuario;
-      template.token = token;
-      return template.evaluate()
-          .setTitle('Pedidos por Marca - Marfim Bahia')
-          .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-          .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-    }
-  }
-
-  // Sem token ou token inválido - mostra página de login
-  var template = HtmlService.createTemplateFromFile('Login');
-  return template.evaluate()
-      .setTitle('Login - Marfim Bahia')
+  // Serve sempre o Index.html - a autenticação acontece no frontend
+  return HtmlService.createHtmlOutputFromFile('Index')
+      .setTitle('Pedidos por Marca - Marfim Bahia')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
