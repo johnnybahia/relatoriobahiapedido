@@ -670,7 +670,43 @@ function getFaturamentoDia() {
       resultado = faturamentoAcumulado;
     }
 
-    Logger.log("✅ getFaturamentoDia concluído: " + resultado.length + " itens no total do dia");
+    Logger.log("✅ getFaturamentoDia concluído: " + resultado.length + " itens calculados");
+
+    // IMPORTANTE: Lê os dados REAIS do histórico (incluindo edições manuais)
+    // Não retorna o calculado, mas sim o que está efetivamente salvo
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+    if (sheet && sheet.getLastRow() > 1) {
+      var historicoDados = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
+      var dadosDodia = [];
+
+      historicoDados.forEach(function(row) {
+        // Normaliza data
+        var dataRegistro = row[0];
+        if (dataRegistro instanceof Date) {
+          var d = dataRegistro;
+          var dia = ("0" + d.getDate()).slice(-2);
+          var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+          var ano = d.getFullYear();
+          dataRegistro = dia + "/" + mes + "/" + ano;
+        } else {
+          dataRegistro = dataRegistro.toString().trim();
+        }
+
+        // Se é o dia de hoje
+        if (dataRegistro === diaAtual) {
+          dadosDodia.push({
+            cliente: row[1].toString(),
+            marca: row[2].toString(),
+            valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0
+          });
+        }
+      });
+
+      if (dadosDodia.length > 0) {
+        Logger.log("📊 Retornando dados do histórico (incluindo edições manuais): " + dadosDodia.length + " itens");
+        resultado = dadosDodia;
+      }
+    }
 
     return {
       sucesso: true,
@@ -759,43 +795,110 @@ function salvarFaturamentoNoHistorico(dados, data) {
     var timestamp = obterTimestamp();
     var novasLinhas = [];
 
-    // Verifica se já existe entrada para esta data
+    // Verifica registros já existentes para esta data
     var lastRow = sheet.getLastRow();
-    var datasExistentes = [];
+    var registrosExistentes = {};
 
     if (lastRow > 1) {
-      // Pega as datas já registradas (coluna A)
-      var dadosExistentes = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      datasExistentes = dadosExistentes.map(function(row) { return row[0]; });
+      // Lê todos os registros do histórico
+      var dadosExistentes = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+
+      dadosExistentes.forEach(function(row) {
+        // Normaliza data
+        var dataRegistro = row[0];
+        if (dataRegistro instanceof Date) {
+          var d = dataRegistro;
+          var dia = ("0" + d.getDate()).slice(-2);
+          var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+          var ano = d.getFullYear();
+          dataRegistro = dia + "/" + mes + "/" + ano;
+        } else {
+          dataRegistro = dataRegistro.toString().trim();
+        }
+
+        // Se é o mesmo dia que estamos salvando
+        if (dataRegistro === data) {
+          var chave = row[1].toString().toUpperCase() + "|" + row[2].toString().toUpperCase();
+          registrosExistentes[chave] = {
+            valor: row[3],
+            observacao: row[4] ? row[4].toString() : ""
+          };
+        }
+      });
+
+      Logger.log("📋 Encontrados " + Object.keys(registrosExistentes).length + " registros existentes para " + data);
     }
 
-    // Se já existe entrada para hoje, atualiza (substitui) ao invés de duplicar
-    var jaExisteHoje = datasExistentes.indexOf(data) !== -1;
+    // Processa novos dados
+    dados.forEach(function(item) {
+      var chave = item.cliente.toUpperCase() + "|" + item.marca.toUpperCase();
 
-    if (jaExisteHoje) {
-      Logger.log("🔄 Atualizando faturamento existente para " + data);
+      // Se já existe no histórico
+      if (registrosExistentes[chave]) {
+        var registroExistente = registrosExistentes[chave];
 
-      // Remove linhas antigas do dia
+        // Se tem observação = foi editado manualmente = NÃO sobrescreve
+        if (registroExistente.observacao && registroExistente.observacao.trim() !== "") {
+          Logger.log("✏️ Mantendo valor editado manualmente: " + item.cliente + " | " + item.marca + " = R$ " + registroExistente.valor);
+          // Não adiciona à lista de novas linhas (mantém o existente)
+        } else {
+          // Sem observação = valor automático = pode atualizar
+          Logger.log("🔄 Atualizando valor automático: " + item.cliente + " | " + item.marca + " = R$ " + item.valor);
+          // Remove o antigo (será adicionado novamente com novo valor)
+          registrosExistentes[chave] = null;
+
+          novasLinhas.push([
+            data,
+            item.cliente,
+            item.marca,
+            item.valor,
+            "", // Observação vazia (automático)
+            timestamp
+          ]);
+        }
+      } else {
+        // Registro novo - adiciona
+        Logger.log("➕ Adicionando novo registro: " + item.cliente + " | " + item.marca + " = R$ " + item.valor);
+        novasLinhas.push([
+          data,
+          item.cliente,
+          item.marca,
+          item.valor,
+          "", // Observação vazia (automático)
+          timestamp
+        ]);
+      }
+    });
+
+    // Remove registros automáticos antigos que serão atualizados
+    if (lastRow > 1) {
       for (var i = lastRow; i >= 2; i--) {
-        var dataLinha = sheet.getRange(i, 1).getValue();
+        var row = sheet.getRange(i, 1, 1, 6).getValues()[0];
+
+        // Normaliza data
+        var dataLinha = row[0];
+        if (dataLinha instanceof Date) {
+          var d = dataLinha;
+          var dia = ("0" + d.getDate()).slice(-2);
+          var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+          var ano = d.getFullYear();
+          dataLinha = dia + "/" + mes + "/" + ano;
+        } else {
+          dataLinha = dataLinha.toString().trim();
+        }
+
+        // Se é o mesmo dia e NÃO tem observação (automático)
         if (dataLinha === data) {
-          sheet.deleteRow(i);
+          var obs = row[4] ? row[4].toString().trim() : "";
+          if (!obs || obs === "") {
+            Logger.log("🗑️ Removendo registro automático antigo linha " + i);
+            sheet.deleteRow(i);
+          }
         }
       }
     }
 
-    // Adiciona novas linhas
-    dados.forEach(function(item) {
-      novasLinhas.push([
-        data,
-        item.cliente,
-        item.marca,
-        item.valor,
-        "", // Observação vazia (será preenchida manualmente se necessário)
-        timestamp
-      ]);
-    });
-
+    // Adiciona as novas linhas
     if (novasLinhas.length > 0) {
       var ultimaLinha = sheet.getLastRow();
       sheet.getRange(ultimaLinha + 1, 1, novasLinhas.length, 6).setValues(novasLinhas);
@@ -805,6 +908,8 @@ function salvarFaturamentoNoHistorico(dados, data) {
       valorRange.setNumberFormat("R$ #,##0.00");
 
       Logger.log("✅ Salvou " + novasLinhas.length + " linhas no histórico para " + data);
+    } else {
+      Logger.log("ℹ️ Nenhum registro novo para adicionar (todos já existem ou foram editados manualmente)");
     }
 
   } catch (erro) {
