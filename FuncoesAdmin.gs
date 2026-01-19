@@ -280,3 +280,98 @@ function forcarRecalculoCompleto() {
     };
   }
 }
+
+/**
+ * VERIFICAR INCONSISTÊNCIAS NOS DADOS
+ * Analisa se existem OCs com múltiplos clientes diferentes
+ * Use esta função para diagnosticar problemas de atribuição de faturamento
+ */
+function verificarInconsistenciasOCs() {
+  try {
+    Logger.log("🔍 VERIFICANDO INCONSISTÊNCIAS NOS DADOS DA ABA DADOS1...\n");
+
+    var dados = lerDados1();
+    var mapaOCs = {};
+    var inconsistencias = [];
+
+    // Agrupa todas as ocorrências de cada OC
+    dados.forEach(function(item) {
+      var oc = item.ordemCompra;
+
+      if (!mapaOCs[oc]) {
+        mapaOCs[oc] = {
+          clientes: [item.cliente],
+          valores: [item.valor],
+          totalValor: item.valor
+        };
+      } else {
+        mapaOCs[oc].valores.push(item.valor);
+        mapaOCs[oc].totalValor += item.valor;
+
+        // Verifica se cliente é diferente
+        if (mapaOCs[oc].clientes.indexOf(item.cliente) === -1) {
+          mapaOCs[oc].clientes.push(item.cliente);
+        }
+      }
+    });
+
+    // Identifica OCs com múltiplos clientes
+    Object.keys(mapaOCs).forEach(function(oc) {
+      var info = mapaOCs[oc];
+
+      if (info.clientes.length > 1) {
+        inconsistencias.push({
+          oc: oc,
+          clientes: info.clientes,
+          valores: info.valores,
+          totalValor: info.totalValor,
+          qtdLinhas: info.valores.length
+        });
+      }
+    });
+
+    // Exibe resultados
+    Logger.log("📊 RESUMO:");
+    Logger.log("   Total de OCs analisadas: " + Object.keys(mapaOCs).length);
+    Logger.log("   Total de linhas nos dados: " + dados.length);
+    Logger.log("   OCs com múltiplos clientes: " + inconsistencias.length + "\n");
+
+    if (inconsistencias.length > 0) {
+      Logger.log("⚠️ INCONSISTÊNCIAS DETECTADAS:\n");
+
+      inconsistencias.forEach(function(item, index) {
+        Logger.log("   " + (index + 1) + ". OC: " + item.oc);
+        Logger.log("      Clientes encontrados: " + item.clientes.join(", "));
+        Logger.log("      Valores individuais: R$ " + item.valores.map(function(v) {
+          return v.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        }).join(", R$ "));
+        Logger.log("      Total somado: R$ " + item.totalValor.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+        Logger.log("      Quantidade de linhas: " + item.qtdLinhas);
+        Logger.log("      ⚠️ PROBLEMA: Sistema manterá apenas '" + item.clientes[0] + "' (primeiro cliente)");
+        Logger.log("");
+      });
+
+      Logger.log("❌ AÇÃO RECOMENDADA:");
+      Logger.log("   Verifique a aba 'Dados1' e corrija os dados inconsistentes.");
+      Logger.log("   Cada Ordem de Compra deveria pertencer a apenas um cliente.");
+
+    } else {
+      Logger.log("✅ NENHUMA INCONSISTÊNCIA DETECTADA!");
+      Logger.log("   Todos os dados estão corretos: cada OC pertence a um único cliente.");
+    }
+
+    return {
+      sucesso: true,
+      totalOCs: Object.keys(mapaOCs).length,
+      totalLinhas: dados.length,
+      inconsistencias: inconsistencias.length
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao verificar inconsistências: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro: " + erro.toString()
+    };
+  }
+}
