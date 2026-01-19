@@ -351,6 +351,40 @@ function lerDados1() {
 }
 
 /**
+ * Agrupa dados da aba Dados1 por Ordem de Compra, somando valores repetidos
+ * OTIMIZAÇÃO: Resolve o problema de OCs duplicadas na comparação de snapshot
+ * @returns {Object} Mapa com OC como chave e {valor: total, cliente: string} como valor
+ */
+function agruparDados1PorOC() {
+  try {
+    var dados = lerDados1();
+    var mapaAgrupado = {};
+
+    dados.forEach(function(item) {
+      var oc = item.ordemCompra;
+
+      if (!mapaAgrupado[oc]) {
+        // Primeira ocorrência desta OC
+        mapaAgrupado[oc] = {
+          valor: item.valor,
+          cliente: item.cliente
+        };
+      } else {
+        // OC repetida - SOMA o valor
+        mapaAgrupado[oc].valor += item.valor;
+      }
+    });
+
+    Logger.log("✅ Agrupados " + Object.keys(mapaAgrupado).length + " OCs únicas de " + dados.length + " registros");
+    return mapaAgrupado;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao agrupar Dados1 por OC: " + erro.toString());
+    return {};
+  }
+}
+
+/**
  * Cria um mapa de OC -> Marca carregando TODAS as linhas de uma vez (OTIMIZADO)
  * @returns {Object} Mapa com OC como chave e marca como valor
  */
@@ -498,14 +532,9 @@ function getFaturamentoDia() {
     var snapshotAnterior = props.getProperty('SNAPSHOT_DADOS1');
     var timestampAnterior = props.getProperty('SNAPSHOT_TIMESTAMP');
 
-    // Lê estado atual
-    var dadosAtuais = lerDados1();
-
-    // Cria map do estado atual (OC -> dados)
-    var mapaAtual = {};
-    dadosAtuais.forEach(function(item) {
-      mapaAtual[item.ordemCompra] = item;
-    });
+    // Lê estado atual AGRUPADO por OC (soma valores repetidos)
+    // OTIMIZAÇÃO: Resolve problema de OCs duplicadas
+    var mapaAtual = agruparDados1PorOC();
 
     var faturado = [];
 
@@ -529,6 +558,10 @@ function getFaturamentoDia() {
     // OTIMIZAÇÃO: Carrega mapa de marcas UMA VEZ
     var mapaOCMarca = criarMapaOCMarca();
 
+    // NOVA LÓGICA: Compara totais AGRUPADOS por OC
+    // Antes: Comparava linha por linha (OCs duplicadas sobrescreviam)
+    // Agora: Compara soma total de cada OC (valores repetidos são somados)
+    // Benefício: Detecção precisa mesmo com múltiplas linhas da mesma OC
     Object.keys(mapaAnterior).forEach(function(oc) {
       var itemAnterior = mapaAnterior[oc];
       var itemAtual = mapaAtual[oc];
@@ -536,10 +569,10 @@ function getFaturamentoDia() {
       var valorFaturado = 0;
 
       if (!itemAtual) {
-        // OC sumiu = faturou tudo
+        // OC sumiu completamente = faturou tudo
         valorFaturado = itemAnterior.valor;
       } else if (itemAtual.valor < itemAnterior.valor) {
-        // Valor diminuiu = faturou a diferença
+        // Valor total diminuiu = faturou a diferença
         valorFaturado = itemAnterior.valor - itemAtual.valor;
       }
 

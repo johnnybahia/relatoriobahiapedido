@@ -194,10 +194,8 @@ function diagnosticarFaturamento() {
     if (snapshot && dadosAtuais.length > 0) {
       Logger.log("\n🔄 COMPARAÇÃO (SNAPSHOT vs ATUAL):");
 
-      var mapaAtual = {};
-      dadosAtuais.forEach(function(item) {
-        mapaAtual[item.ordemCompra] = item;
-      });
+      // Usa função agrupada para somar OCs repetidas
+      var mapaAtual = agruparDados1PorOC();
 
       var mapaSnapshot = JSON.parse(snapshot);
 
