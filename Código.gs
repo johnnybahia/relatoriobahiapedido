@@ -359,6 +359,7 @@ function agruparDados1PorOC() {
   try {
     var dados = lerDados1();
     var mapaAgrupado = {};
+    var countInconsistencias = 0;
 
     dados.forEach(function(item) {
       var oc = item.ordemCompra;
@@ -372,10 +373,20 @@ function agruparDados1PorOC() {
       } else {
         // OC repetida - SOMA o valor
         mapaAgrupado[oc].valor += item.valor;
+
+        // AVISO: Detecta se a mesma OC tem clientes diferentes
+        if (mapaAgrupado[oc].cliente !== item.cliente) {
+          countInconsistencias++;
+          Logger.log("⚠️ Aviso: OC '" + oc + "' encontrada com múltiplos clientes ('" +
+                    mapaAgrupado[oc].cliente + "' e '" + item.cliente + "'). Mantendo o primeiro.");
+        }
       }
     });
 
     Logger.log("✅ Agrupados " + Object.keys(mapaAgrupado).length + " OCs únicas de " + dados.length + " registros");
+    if (countInconsistencias > 0) {
+      Logger.log("⚠️ ATENÇÃO: Detectadas " + countInconsistencias + " OCs com múltiplos clientes. Verifique os dados!");
+    }
     return mapaAgrupado;
 
   } catch (erro) {
