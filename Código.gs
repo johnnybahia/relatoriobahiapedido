@@ -540,6 +540,25 @@ function getFaturamentoDia() {
     Logger.log("💰 Iniciando getFaturamentoDia...");
 
     var props = PropertiesService.getScriptProperties();
+
+    // CORREÇÃO: Verifica e limpa faturamento de dias anteriores
+    // Isso previne que o card exiba dados antigos como se fossem de hoje
+    var dataAtual = new Date();
+    var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
+                   ("0" + (dataAtual.getMonth() + 1)).slice(-2) + "/" +
+                   dataAtual.getFullYear();
+
+    var diaArmazenado = props.getProperty('FATURAMENTO_DATA');
+
+    if (diaArmazenado && diaArmazenado !== diaAtual) {
+      Logger.log("📅 Detectado mudança de dia: " + diaArmazenado + " → " + diaAtual);
+      Logger.log("🔄 Limpando faturamento acumulado do dia anterior...");
+      props.deleteProperty('ULTIMO_FATURAMENTO');
+      props.deleteProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
+      props.deleteProperty('FATURAMENTO_DATA');
+      Logger.log("✅ Faturamento acumulado limpo");
+    }
+
     var snapshotAnterior = props.getProperty('SNAPSHOT_DADOS1');
     var timestampAnterior = props.getProperty('SNAPSHOT_TIMESTAMP');
 

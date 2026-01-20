@@ -68,6 +68,73 @@ function resetarFaturamentoDia() {
 }
 
 /**
+ * VERIFICAR E CORRIGIR DATA DO FATURAMENTO ACUMULADO
+ * Detecta se o faturamento acumulado é de outro dia e limpa automaticamente
+ * Use esta função quando o card exibir faturamento de dias anteriores
+ */
+function verificarECorrigirDataFaturamento() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+
+    var dataAtual = new Date();
+    var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
+                   ("0" + (dataAtual.getMonth() + 1)).slice(-2) + "/" +
+                   dataAtual.getFullYear();
+
+    var diaArmazenado = props.getProperty('FATURAMENTO_DATA');
+    var faturamento = props.getProperty('ULTIMO_FATURAMENTO');
+
+    Logger.log("🔍 VERIFICANDO DATA DO FATURAMENTO ACUMULADO:");
+    Logger.log("   Data atual: " + diaAtual);
+    Logger.log("   Data armazenada: " + (diaArmazenado || "Nenhuma"));
+
+    if (!diaArmazenado || !faturamento) {
+      Logger.log("   ✅ Nenhum faturamento acumulado encontrado");
+      return {
+        sucesso: true,
+        mensagem: "Nenhum faturamento acumulado",
+        precisouLimpar: false
+      };
+    }
+
+    if (diaArmazenado !== diaAtual) {
+      Logger.log("   ⚠️ PROBLEMA DETECTADO!");
+      Logger.log("   O faturamento acumulado é de outro dia (" + diaArmazenado + ")");
+      Logger.log("   Isso faz o card exibir dados antigos como se fossem de hoje");
+      Logger.log("\n   🔄 Limpando faturamento acumulado antigo...");
+
+      props.deleteProperty('ULTIMO_FATURAMENTO');
+      props.deleteProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
+      props.deleteProperty('FATURAMENTO_DATA');
+
+      Logger.log("   ✅ Faturamento acumulado removido!");
+      Logger.log("   ℹ️  Card agora exibirá o último registro do histórico");
+
+      return {
+        sucesso: true,
+        mensagem: "Faturamento de " + diaArmazenado + " foi removido. Card atualizado.",
+        precisouLimpar: true,
+        dataRemovida: diaArmazenado
+      };
+    } else {
+      Logger.log("   ✅ Data correta - faturamento é de hoje mesmo");
+      return {
+        sucesso: true,
+        mensagem: "Data correta",
+        precisouLimpar: false
+      };
+    }
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao verificar data: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro: " + erro.toString()
+    };
+  }
+}
+
+/**
  * DIAGNÓSTICO COMPLETO DO SISTEMA DE FATURAMENTO
  * Mostra o estado atual de todos os componentes
  */
