@@ -666,7 +666,7 @@ function exportarDiagnosticoParaPlanilha() {
       sheet.appendRow(["⚠️ ERRO", "Nenhum snapshot encontrado!"]);
       sheet.appendRow([]);
       sheet.appendRow(["SOLUÇÃO:", "Execute a função getFaturamentoDia() primeiro para criar o snapshot inicial"]);
-      sheet.appendRow(["OU", "Aguarde a próxima execução automática do trigger (8h ou 19h)"]);
+      sheet.appendRow(["OU", "Aguarde a próxima execução automática do trigger (a cada 1 hora)"]);
 
       Logger.log("⚠️ Nenhum snapshot encontrado. Criando um agora...");
 
