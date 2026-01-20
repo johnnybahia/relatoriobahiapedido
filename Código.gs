@@ -819,6 +819,23 @@ function getFaturamentoDia() {
       Logger.log("✅ Faturamento acumulado limpo");
     }
 
+    // SINCRONIZAÇÃO AUTOMÁTICA: Atualiza aba de controle com novas OCs
+    // Isso garante que pedidos novos apareçam automaticamente na aba
+    try {
+      var doc = SpreadsheetApp.getActiveSpreadsheet();
+      var sheetControle = doc.getSheetByName("ControleFaturamento");
+
+      if (sheetControle) {
+        Logger.log("🔄 Sincronizando aba de controle com novos pedidos...");
+        sincronizarOCsNaAbaControle(sheetControle);
+      } else {
+        Logger.log("ℹ️ Aba ControleFaturamento não existe. Execute criarOuAtualizarAbaControle() para criar.");
+      }
+    } catch (erroSinc) {
+      Logger.log("⚠️ Erro ao sincronizar aba de controle: " + erroSinc.toString());
+      // Continua execução mesmo se sincronização falhar
+    }
+
     var snapshotAnterior = props.getProperty('SNAPSHOT_DADOS1');
     var timestampAnterior = props.getProperty('SNAPSHOT_TIMESTAMP');
 
