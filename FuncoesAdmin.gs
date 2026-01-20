@@ -282,6 +282,425 @@ function forcarRecalculoCompleto() {
 }
 
 /**
+ * ANALISAR DETECÇÃO DE FATURAMENTO (DIAGNÓSTICO DETALHADO)
+ * Mostra exatamente como o sistema está calculando o faturamento
+ * Use esta função para rastrear de onde vêm os valores
+ */
+function analisarDeteccaoFaturamento() {
+  try {
+    Logger.log("═══════════════════════════════════════════════════════════");
+    Logger.log("🔍 ANÁLISE DETALHADA DA DETECÇÃO DE FATURAMENTO");
+    Logger.log("═══════════════════════════════════════════════════════════\n");
+
+    var props = PropertiesService.getScriptProperties();
+    var snapshotAnterior = props.getProperty('SNAPSHOT_DADOS1');
+    var timestampSnapshot = props.getProperty('SNAPSHOT_TIMESTAMP');
+
+    // 1. MOSTRA SNAPSHOT ANTERIOR
+    Logger.log("📸 SNAPSHOT ANTERIOR (BASE DE COMPARAÇÃO):");
+    Logger.log("   Timestamp: " + (timestampSnapshot || "Não disponível"));
+
+    if (!snapshotAnterior) {
+      Logger.log("   ❌ Nenhum snapshot encontrado! Execute getFaturamentoDia() primeiro.\n");
+      return;
+    }
+
+    var mapaAnterior = JSON.parse(snapshotAnterior);
+    var totalAnterior = 0;
+    var countOCsAnterior = Object.keys(mapaAnterior).length;
+
+    Logger.log("   Total de OCs: " + countOCsAnterior);
+    Logger.log("\n   Detalhamento (primeiras 20 OCs):");
+
+    var ocsAnterior = Object.keys(mapaAnterior).slice(0, 20);
+    ocsAnterior.forEach(function(oc) {
+      var item = mapaAnterior[oc];
+      totalAnterior += item.valor;
+      Logger.log("      • OC " + oc + " | " + item.cliente + " | R$ " +
+                item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+    });
+
+    if (countOCsAnterior > 20) {
+      Logger.log("      ... e mais " + (countOCsAnterior - 20) + " OCs");
+      Object.keys(mapaAnterior).slice(20).forEach(function(oc) {
+        totalAnterior += mapaAnterior[oc].valor;
+      });
+    }
+
+    Logger.log("\n   💰 VALOR TOTAL NO SNAPSHOT: R$ " + totalAnterior.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+
+    // 2. MOSTRA ESTADO ATUAL
+    Logger.log("\n" + "─".repeat(60));
+    Logger.log("📊 ESTADO ATUAL (DADOS1 AGORA):");
+
+    var mapaAtual = agruparDados1PorOC();
+    var totalAtual = 0;
+    var countOCsAtual = Object.keys(mapaAtual).length;
+
+    Logger.log("   Total de OCs: " + countOCsAtual);
+    Logger.log("\n   Detalhamento (primeiras 20 OCs):");
+
+    var ocsAtual = Object.keys(mapaAtual).slice(0, 20);
+    ocsAtual.forEach(function(oc) {
+      var item = mapaAtual[oc];
+      totalAtual += item.valor;
+      Logger.log("      • OC " + oc + " | " + item.cliente + " | R$ " +
+                item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+    });
+
+    if (countOCsAtual > 20) {
+      Logger.log("      ... e mais " + (countOCsAtual - 20) + " OCs");
+      Object.keys(mapaAtual).slice(20).forEach(function(oc) {
+        totalAtual += mapaAtual[oc].valor;
+      });
+    }
+
+    Logger.log("\n   💰 VALOR TOTAL ATUAL: R$ " + totalAtual.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+
+    // 3. COMPARAÇÃO DETALHADA
+    Logger.log("\n" + "─".repeat(60));
+    Logger.log("🔄 COMPARAÇÃO (O QUE MUDOU?):");
+
+    var mapaOCMarca = criarMapaOCMarca();
+    var faturado = [];
+    var totalFaturado = 0;
+
+    Logger.log("\n   OCs que SUMIRAM (faturadas 100%):");
+    var countSumiu = 0;
+    Object.keys(mapaAnterior).forEach(function(oc) {
+      if (!mapaAtual[oc]) {
+        countSumiu++;
+        var item = mapaAnterior[oc];
+        var marca = buscarMarcaNoMapa(oc, mapaOCMarca);
+
+        if (countSumiu <= 15) {
+          Logger.log("      • OC " + oc + " | " + item.cliente + " | " + marca + " | R$ " +
+                    item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+        }
+
+        faturado.push({
+          cliente: item.cliente,
+          marca: marca,
+          valor: item.valor,
+          oc: oc,
+          tipo: "sumiu"
+        });
+        totalFaturado += item.valor;
+      }
+    });
+
+    if (countSumiu === 0) {
+      Logger.log("      (nenhuma)");
+    } else if (countSumiu > 15) {
+      Logger.log("      ... e mais " + (countSumiu - 15) + " OCs");
+    }
+    Logger.log("   Subtotal: R$ " + faturado.reduce(function(sum, item) {
+      return item.tipo === "sumiu" ? sum + item.valor : sum;
+    }, 0).toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+
+    Logger.log("\n   OCs com VALOR REDUZIDO (faturamento parcial):");
+    var countReduzido = 0;
+    Object.keys(mapaAnterior).forEach(function(oc) {
+      var itemAnterior = mapaAnterior[oc];
+      var itemAtual = mapaAtual[oc];
+
+      if (itemAtual && itemAtual.valor < itemAnterior.valor) {
+        countReduzido++;
+        var diferenca = itemAnterior.valor - itemAtual.valor;
+        var marca = buscarMarcaNoMapa(oc, mapaOCMarca);
+
+        if (countReduzido <= 15) {
+          Logger.log("      • OC " + oc + " | " + itemAnterior.cliente + " | " + marca);
+          Logger.log("        Era: R$ " + itemAnterior.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}) +
+                    " → Agora: R$ " + itemAtual.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}) +
+                    " → Faturado: R$ " + diferenca.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+        }
+
+        faturado.push({
+          cliente: itemAnterior.cliente,
+          marca: marca,
+          valor: diferenca,
+          oc: oc,
+          tipo: "reduzido"
+        });
+        totalFaturado += diferenca;
+      }
+    });
+
+    if (countReduzido === 0) {
+      Logger.log("      (nenhuma)");
+    } else if (countReduzido > 15) {
+      Logger.log("      ... e mais " + (countReduzido - 15) + " OCs");
+    }
+
+    Logger.log("\n   💰 TOTAL FATURADO DETECTADO: R$ " + totalFaturado.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+
+    // 4. AGRUPAMENTO POR CLIENTE+MARCA
+    Logger.log("\n" + "─".repeat(60));
+    Logger.log("📦 AGRUPAMENTO POR CLIENTE+MARCA:");
+
+    var faturadoAgrupado = {};
+    faturado.forEach(function(item) {
+      var chave = item.cliente + "|" + item.marca;
+      if (!faturadoAgrupado[chave]) {
+        faturadoAgrupado[chave] = {
+          cliente: item.cliente,
+          marca: item.marca,
+          valor: 0,
+          ocs: []
+        };
+      }
+      faturadoAgrupado[chave].valor += item.valor;
+      faturadoAgrupado[chave].ocs.push(item.oc);
+    });
+
+    var agrupados = Object.keys(faturadoAgrupado).map(function(chave) {
+      return faturadoAgrupado[chave];
+    }).sort(function(a, b) {
+      return b.valor - a.valor;
+    });
+
+    Logger.log("\n   Total de grupos: " + agrupados.length);
+    agrupados.forEach(function(item, index) {
+      Logger.log("      " + (index + 1) + ". " + item.cliente + " | " + item.marca +
+                " | R$ " + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+      Logger.log("         OCs: " + item.ocs.join(", "));
+    });
+
+    var totalAgrupado = agrupados.reduce(function(sum, item) { return sum + item.valor; }, 0);
+    Logger.log("\n   💰 TOTAL AGRUPADO: R$ " + totalAgrupado.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+
+    // 5. O QUE ESTÁ NO HISTÓRICO
+    Logger.log("\n" + "─".repeat(60));
+    Logger.log("📋 O QUE ESTÁ NO HISTÓRICO (ABA HistoricoFaturamento):");
+
+    var dataAtual = new Date();
+    var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
+                   ("0" + (dataAtual.getMonth() + 1)).slice(-2) + "/" +
+                   dataAtual.getFullYear();
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+    if (sheet && sheet.getLastRow() > 1) {
+      var historicoDados = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
+      var dadosHoje = [];
+
+      historicoDados.forEach(function(row) {
+        var dataRegistro = row[0];
+        if (dataRegistro instanceof Date) {
+          var d = dataRegistro;
+          dataRegistro = ("0" + d.getDate()).slice(-2) + "/" +
+                        ("0" + (d.getMonth() + 1)).slice(-2) + "/" +
+                        d.getFullYear();
+        } else {
+          dataRegistro = dataRegistro.toString().trim();
+        }
+
+        if (dataRegistro === diaAtual) {
+          dadosHoje.push({
+            cliente: row[1].toString(),
+            marca: row[2].toString(),
+            valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0,
+            observacao: row[4] ? row[4].toString() : ""
+          });
+        }
+      });
+
+      Logger.log("   Data de hoje: " + diaAtual);
+      Logger.log("   Registros de hoje: " + dadosHoje.length);
+
+      if (dadosHoje.length > 0) {
+        Logger.log("\n   Detalhamento:");
+        var totalHistorico = 0;
+        dadosHoje.forEach(function(item, index) {
+          totalHistorico += item.valor;
+          var obs = item.observacao ? " [" + item.observacao + "]" : "";
+          Logger.log("      " + (index + 1) + ". " + item.cliente + " | " + item.marca +
+                    " | R$ " + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + obs);
+        });
+        Logger.log("\n   💰 TOTAL NO HISTÓRICO HOJE: R$ " + totalHistorico.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+      } else {
+        Logger.log("   (nenhum registro de hoje)");
+      }
+    } else {
+      Logger.log("   ❌ Aba HistoricoFaturamento não encontrada ou vazia");
+    }
+
+    // 6. RESUMO FINAL
+    Logger.log("\n" + "═".repeat(60));
+    Logger.log("📊 RESUMO FINAL:");
+    Logger.log("   Total anterior (snapshot): R$ " + totalAnterior.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+    Logger.log("   Total atual (Dados1): R$ " + totalAtual.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+    Logger.log("   Diferença detectada: R$ " + totalFaturado.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+    Logger.log("   Diferença real: R$ " + (totalAnterior - totalAtual).toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+
+    if (Math.abs(totalFaturado - (totalAnterior - totalAtual)) > 0.01) {
+      Logger.log("\n   ⚠️ ATENÇÃO: Há divergência entre a diferença detectada e a real!");
+      Logger.log("   Isso pode indicar problema no agrupamento ou na comparação.");
+    }
+
+    Logger.log("═".repeat(60));
+
+    return {
+      sucesso: true,
+      totalAnterior: totalAnterior,
+      totalAtual: totalAtual,
+      totalFaturado: totalFaturado,
+      diferencaReal: totalAnterior - totalAtual
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao analisar detecção: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro: " + erro.toString()
+    };
+  }
+}
+
+/**
+ * EXPORTAR DIAGNÓSTICO PARA PLANILHA
+ * Cria uma aba com análise detalhada do faturamento
+ * Facilita visualização dos dados de comparação
+ */
+function exportarDiagnosticoParaPlanilha() {
+  try {
+    Logger.log("📊 Exportando diagnóstico para planilha...");
+
+    var doc = SpreadsheetApp.getActiveSpreadsheet();
+    var nomeAba = "DEBUG_Faturamento";
+
+    // Remove aba antiga se existir
+    var abaExistente = doc.getSheetByName(nomeAba);
+    if (abaExistente) {
+      doc.deleteSheet(abaExistente);
+    }
+
+    // Cria nova aba
+    var sheet = doc.insertSheet(nomeAba);
+
+    var props = PropertiesService.getScriptProperties();
+    var snapshotAnterior = props.getProperty('SNAPSHOT_DADOS1');
+    var timestampSnapshot = props.getProperty('SNAPSHOT_TIMESTAMP');
+
+    if (!snapshotAnterior) {
+      sheet.appendRow(["ERRO", "Nenhum snapshot encontrado!"]);
+      return;
+    }
+
+    var mapaAnterior = JSON.parse(snapshotAnterior);
+    var mapaAtual = agruparDados1PorOC();
+    var mapaOCMarca = criarMapaOCMarca();
+
+    // SEÇÃO 1: SNAPSHOT ANTERIOR
+    sheet.appendRow(["📸 SNAPSHOT ANTERIOR", timestampSnapshot || ""]);
+    sheet.appendRow([]);
+    sheet.appendRow(["OC", "Cliente", "Valor"]);
+
+    Object.keys(mapaAnterior).forEach(function(oc) {
+      var item = mapaAnterior[oc];
+      sheet.appendRow([oc, item.cliente, item.valor]);
+    });
+
+    var linhaAtual = sheet.getLastRow() + 2;
+
+    // SEÇÃO 2: ESTADO ATUAL
+    sheet.getRange(linhaAtual, 1).setValue("📊 ESTADO ATUAL");
+    linhaAtual += 2;
+    sheet.getRange(linhaAtual, 1, 1, 3).setValues([["OC", "Cliente", "Valor"]]);
+    linhaAtual++;
+
+    var linhaInicioAtual = linhaAtual;
+    Object.keys(mapaAtual).forEach(function(oc) {
+      var item = mapaAtual[oc];
+      sheet.getRange(linhaAtual, 1, 1, 3).setValues([[oc, item.cliente, item.valor]]);
+      linhaAtual++;
+    });
+
+    linhaAtual += 2;
+
+    // SEÇÃO 3: DIFERENÇAS DETECTADAS
+    sheet.getRange(linhaAtual, 1).setValue("🔄 FATURAMENTO DETECTADO");
+    linhaAtual += 2;
+    sheet.getRange(linhaAtual, 1, 1, 6).setValues([["OC", "Cliente", "Marca", "Valor Faturado", "Tipo", "Observação"]]);
+    linhaAtual++;
+
+    var linhaInicioFaturado = linhaAtual;
+
+    // OCs que sumiram
+    Object.keys(mapaAnterior).forEach(function(oc) {
+      if (!mapaAtual[oc]) {
+        var item = mapaAnterior[oc];
+        var marca = buscarMarcaNoMapa(oc, mapaOCMarca);
+        sheet.getRange(linhaAtual, 1, 1, 6).setValues([[
+          oc,
+          item.cliente,
+          marca,
+          item.valor,
+          "Sumiu (100%)",
+          "OC removida completamente"
+        ]]);
+        linhaAtual++;
+      }
+    });
+
+    // OCs com valor reduzido
+    Object.keys(mapaAnterior).forEach(function(oc) {
+      var itemAnterior = mapaAnterior[oc];
+      var itemAtual = mapaAtual[oc];
+
+      if (itemAtual && itemAtual.valor < itemAnterior.valor) {
+        var diferenca = itemAnterior.valor - itemAtual.valor;
+        var marca = buscarMarcaNoMapa(oc, mapaOCMarca);
+        sheet.getRange(linhaAtual, 1, 1, 6).setValues([[
+          oc,
+          itemAnterior.cliente,
+          marca,
+          diferenca,
+          "Reduzido",
+          "Era R$ " + itemAnterior.valor.toFixed(2) + " → Agora R$ " + itemAtual.valor.toFixed(2)
+        ]]);
+        linhaAtual++;
+      }
+    });
+
+    // Formata cabeçalhos
+    sheet.getRange(1, 1, 1, 3).setBackground("#4CAF50").setFontColor("#FFFFFF").setFontWeight("bold");
+    sheet.getRange(3, 1, 1, 3).setBackground("#2196F3").setFontColor("#FFFFFF").setFontWeight("bold");
+
+    var linhaHeader2 = linhaInicioAtual - 1;
+    sheet.getRange(linhaHeader2, 1, 1, 3).setBackground("#2196F3").setFontColor("#FFFFFF").setFontWeight("bold");
+
+    sheet.getRange(linhaInicioFaturado - 1, 1, 1, 6).setBackground("#FF9800").setFontColor("#FFFFFF").setFontWeight("bold");
+
+    // Ajusta larguras
+    sheet.setColumnWidth(1, 120); // OC
+    sheet.setColumnWidth(2, 200); // Cliente
+    sheet.setColumnWidth(3, 150); // Marca/Valor
+    sheet.setColumnWidth(4, 120); // Valor Faturado
+    sheet.setColumnWidth(5, 120); // Tipo
+    sheet.setColumnWidth(6, 300); // Observação
+
+    // Congela primeira linha
+    sheet.setFrozenRows(1);
+
+    Logger.log("✅ Diagnóstico exportado para aba '" + nomeAba + "'");
+    Logger.log("ℹ️  Abra a planilha e veja a aba " + nomeAba + " para análise detalhada");
+
+    return {
+      sucesso: true,
+      mensagem: "Diagnóstico exportado para aba '" + nomeAba + "'"
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao exportar diagnóstico: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro: " + erro.toString()
+    };
+  }
+}
+
+/**
  * VERIFICAR INCONSISTÊNCIAS NOS DADOS
  * Analisa se existem OCs com múltiplos clientes diferentes
  * Use esta função para diagnosticar problemas de atribuição de faturamento
