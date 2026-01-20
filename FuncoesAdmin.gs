@@ -301,8 +301,21 @@ function analisarDeteccaoFaturamento() {
     Logger.log("   Timestamp: " + (timestampSnapshot || "Não disponível"));
 
     if (!snapshotAnterior) {
-      Logger.log("   ❌ Nenhum snapshot encontrado! Execute getFaturamentoDia() primeiro.\n");
-      return;
+      Logger.log("   ❌ Nenhum snapshot encontrado!");
+      Logger.log("\n⚠️ Criando snapshot inicial agora...");
+
+      var mapaAtual = agruparDados1PorOC();
+      props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
+      props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
+
+      Logger.log("✅ Snapshot criado com " + Object.keys(mapaAtual).length + " OCs");
+      Logger.log("ℹ️  Execute esta função novamente após a próxima verificação automática");
+      Logger.log("ℹ️  ou após alterações nos dados para ver as diferenças detectadas.\n");
+
+      return {
+        sucesso: true,
+        mensagem: "Snapshot inicial criado. Execute novamente após próxima verificação."
+      };
     }
 
     var mapaAnterior = JSON.parse(snapshotAnterior);
@@ -583,8 +596,24 @@ function exportarDiagnosticoParaPlanilha() {
     var timestampSnapshot = props.getProperty('SNAPSHOT_TIMESTAMP');
 
     if (!snapshotAnterior) {
-      sheet.appendRow(["ERRO", "Nenhum snapshot encontrado!"]);
-      return;
+      sheet.appendRow(["⚠️ ERRO", "Nenhum snapshot encontrado!"]);
+      sheet.appendRow([]);
+      sheet.appendRow(["SOLUÇÃO:", "Execute a função getFaturamentoDia() primeiro para criar o snapshot inicial"]);
+      sheet.appendRow(["OU", "Aguarde a próxima execução automática do trigger (8h ou 19h)"]);
+
+      Logger.log("⚠️ Nenhum snapshot encontrado. Criando um agora...");
+
+      // Cria snapshot automaticamente
+      var mapaAtual = agruparDados1PorOC();
+      props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
+      props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
+
+      Logger.log("✅ Snapshot criado! Execute esta função novamente após próxima verificação.");
+
+      return {
+        sucesso: false,
+        mensagem: "Snapshot não encontrado. Um novo foi criado. Execute novamente após próxima verificação."
+      };
     }
 
     var mapaAnterior = JSON.parse(snapshotAnterior);
