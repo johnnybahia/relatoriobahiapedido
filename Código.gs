@@ -457,6 +457,266 @@ function buscarMarcaNoMapa(oc, mapaOCMarca) {
 }
 
 /**
+ * CRIAR/ATUALIZAR ABA DE CONTROLE VISUAL DE FATURAMENTO
+ * Mantém registro detalhado de cada OC com valores totais, faturados e saldo
+ * Facilita diagnóstico e permite visualização clara de erros
+ */
+function criarOuAtualizarAbaControle() {
+  try {
+    var doc = SpreadsheetApp.getActiveSpreadsheet();
+    var nomeAba = "ControleFaturamento";
+    var sheet = doc.getSheetByName(nomeAba);
+
+    // Cria aba se não existir
+    if (!sheet) {
+      Logger.log("📋 Criando aba '" + nomeAba + "'...");
+      sheet = doc.insertSheet(nomeAba);
+
+      // Configura cabeçalho
+      sheet.appendRow([
+        "OC",
+        "Cliente",
+        "Marca",
+        "Valor Total",
+        "Valor Faturado",
+        "Saldo Restante",
+        "% Faturado",
+        "Última Detecção",
+        "Status"
+      ]);
+
+      // Formata cabeçalho
+      var headerRange = sheet.getRange(1, 1, 1, 9);
+      headerRange.setBackground("#1976D2");
+      headerRange.setFontColor("#FFFFFF");
+      headerRange.setFontWeight("bold");
+      headerRange.setHorizontalAlignment("center");
+      sheet.setFrozenRows(1);
+
+      // Define larguras das colunas
+      sheet.setColumnWidth(1, 120);  // OC
+      sheet.setColumnWidth(2, 200);  // Cliente
+      sheet.setColumnWidth(3, 150);  // Marca
+      sheet.setColumnWidth(4, 120);  // Valor Total
+      sheet.setColumnWidth(5, 120);  // Valor Faturado
+      sheet.setColumnWidth(6, 120);  // Saldo Restante
+      sheet.setColumnWidth(7, 100);  // % Faturado
+      sheet.setColumnWidth(8, 150);  // Última Detecção
+      sheet.setColumnWidth(9, 100);  // Status
+
+      Logger.log("✅ Aba criada com cabeçalho");
+    }
+
+    // Sincroniza com dados atuais
+    sincronizarOCsNaAbaControle(sheet);
+
+    return {
+      sucesso: true,
+      mensagem: "Aba de controle atualizada"
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao criar/atualizar aba controle: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro: " + erro.toString()
+    };
+  }
+}
+
+/**
+ * SINCRONIZAR OCs NA ABA DE CONTROLE
+ * Adiciona novas OCs que apareceram e atualiza valores totais
+ */
+function sincronizarOCsNaAbaControle(sheet) {
+  try {
+    Logger.log("🔄 Sincronizando OCs na aba de controle...");
+
+    // Lê dados atuais agrupados por OC
+    var mapaAtual = agruparDados1PorOC();
+    var mapaOCMarca = criarMapaOCMarca();
+
+    // Lê o que já está na aba
+    var lastRow = sheet.getLastRow();
+    var dadosExistentes = {};
+
+    if (lastRow > 1) {
+      var dados = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      dados.forEach(function(row, index) {
+        var oc = row[0].toString().trim();
+        dadosExistentes[oc] = {
+          linha: index + 2,
+          valorFaturado: typeof row[4] === 'number' ? row[4] : 0,
+          ultimaDeteccao: row[7] || ""
+        };
+      });
+    }
+
+    var novasLinhas = [];
+    var linhasAtualizadas = 0;
+
+    // Processa cada OC atual
+    Object.keys(mapaAtual).forEach(function(oc) {
+      var item = mapaAtual[oc];
+      var marca = buscarMarcaNoMapa(oc, mapaOCMarca);
+      var valorTotal = item.valor;
+
+      if (dadosExistentes[oc]) {
+        // OC já existe - atualiza apenas valor total e saldo
+        var linha = dadosExistentes[oc].linha;
+        var valorFaturado = dadosExistentes[oc].valorFaturado;
+        var saldoRestante = valorTotal - valorFaturado;
+        var percFaturado = valorTotal > 0 ? (valorFaturado / valorTotal * 100).toFixed(1) + "%" : "0%";
+        var status = saldoRestante <= 0 ? "Faturado" : (valorFaturado > 0 ? "Parcial" : "Pendente");
+
+        sheet.getRange(linha, 4).setValue(valorTotal);  // Valor Total
+        sheet.getRange(linha, 6).setValue(saldoRestante);  // Saldo Restante
+        sheet.getRange(linha, 7).setValue(percFaturado);  // %
+        sheet.getRange(linha, 9).setValue(status);  // Status
+
+        linhasAtualizadas++;
+
+      } else {
+        // OC nova - adiciona
+        novasLinhas.push([
+          oc,
+          item.cliente,
+          marca,
+          valorTotal,
+          0,  // Valor Faturado (inicial)
+          valorTotal,  // Saldo Restante
+          "0%",  // % Faturado
+          "",  // Última Detecção
+          "Pendente"  // Status
+        ]);
+      }
+    });
+
+    // Adiciona novas linhas
+    if (novasLinhas.length > 0) {
+      sheet.getRange(lastRow + 1, 1, novasLinhas.length, 9).setValues(novasLinhas);
+      Logger.log("➕ Adicionadas " + novasLinhas.length + " novas OCs");
+    }
+
+    if (linhasAtualizadas > 0) {
+      Logger.log("🔄 Atualizadas " + linhasAtualizadas + " OCs existentes");
+    }
+
+    // Aplica formatação condicional
+    aplicarFormatacaoCondicionalControle(sheet);
+
+    Logger.log("✅ Sincronização concluída");
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao sincronizar OCs: " + erro.toString());
+  }
+}
+
+/**
+ * REGISTRAR FATURAMENTO NA ABA DE CONTROLE
+ * Atualiza valor faturado quando sistema detecta faturamento
+ */
+function registrarFaturamentoNaAbaControle(faturamentosDetectados, dataDeteccao) {
+  try {
+    if (!faturamentosDetectados || faturamentosDetectados.length === 0) {
+      return;
+    }
+
+    Logger.log("📊 Registrando faturamento na aba de controle...");
+
+    var doc = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = doc.getSheetByName("ControleFaturamento");
+
+    if (!sheet) {
+      Logger.log("⚠️ Aba ControleFaturamento não existe. Criando...");
+      criarOuAtualizarAbaControle();
+      sheet = doc.getSheetByName("ControleFaturamento");
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log("⚠️ Aba vazia. Execute criarOuAtualizarAbaControle() primeiro");
+      return;
+    }
+
+    // Lê dados da aba
+    var dados = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+    var mapaLinhas = {};
+
+    dados.forEach(function(row, index) {
+      var oc = row[0].toString().trim();
+      mapaLinhas[oc] = {
+        linha: index + 2,
+        valorTotal: typeof row[3] === 'number' ? row[3] : 0,
+        valorFaturado: typeof row[4] === 'number' ? row[4] : 0
+      };
+    });
+
+    var linhasAtualizadas = 0;
+
+    // Atualiza cada faturamento detectado
+    faturamentosDetectados.forEach(function(item) {
+      var oc = item.oc;
+
+      if (mapaLinhas[oc]) {
+        var info = mapaLinhas[oc];
+        var novoValorFaturado = info.valorFaturado + item.valor;
+        var saldoRestante = info.valorTotal - novoValorFaturado;
+        var percFaturado = info.valorTotal > 0 ? (novoValorFaturado / info.valorTotal * 100).toFixed(1) + "%" : "0%";
+        var status = saldoRestante <= 0 ? "Faturado" : (novoValorFaturado > 0 ? "Parcial" : "Pendente");
+
+        sheet.getRange(info.linha, 5).setValue(novoValorFaturado);  // Valor Faturado
+        sheet.getRange(info.linha, 6).setValue(saldoRestante);  // Saldo Restante
+        sheet.getRange(info.linha, 7).setValue(percFaturado);  // %
+        sheet.getRange(info.linha, 8).setValue(dataDeteccao);  // Última Detecção
+        sheet.getRange(info.linha, 9).setValue(status);  // Status
+
+        linhasAtualizadas++;
+      }
+    });
+
+    Logger.log("✅ Registrados " + linhasAtualizadas + " faturamentos na aba de controle");
+
+    // Reaplica formatação
+    aplicarFormatacaoCondicionalControle(sheet);
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao registrar faturamento na aba: " + erro.toString());
+  }
+}
+
+/**
+ * APLICAR FORMATAÇÃO CONDICIONAL À ABA DE CONTROLE
+ * Destaca status com cores
+ */
+function aplicarFormatacaoCondicionalControle(sheet) {
+  try {
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+
+    dados.forEach(function(row, index) {
+      var linha = index + 2;
+      var status = row[8].toString();
+      var rangeStatus = sheet.getRange(linha, 9);
+
+      // Cores por status
+      if (status === "Faturado") {
+        rangeStatus.setBackground("#4CAF50").setFontColor("#FFFFFF");
+      } else if (status === "Parcial") {
+        rangeStatus.setBackground("#FF9800").setFontColor("#FFFFFF");
+      } else if (status === "Pendente") {
+        rangeStatus.setBackground("#F5F5F5").setFontColor("#000000");
+      }
+    });
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao aplicar formatação: " + erro.toString());
+  }
+}
+
+/**
  * Retorna pedidos a faturar (card 1) - OTIMIZADO
  * Agrupa por cliente+marca, soma valores
  */
@@ -727,6 +987,10 @@ function getFaturamentoDia() {
 
       // Salva no histórico da planilha (apenas quando é novo faturamento no acumulado)
       salvarFaturamentoNoHistorico(novoAcumulado, diaAtual);
+
+      // NOVO: Registra faturamento na aba de controle visual (com OCs individuais)
+      // Usa a lista 'faturado' que contém os OCs antes do agrupamento
+      registrarFaturamentoNaAbaControle(faturado, diaAtual + " " + obterTimestamp().split(" às ")[1]);
     } else if (faturamentoAcumulado.length > 0) {
       // Não houve novo faturamento, mas há acumulado do dia
       Logger.log("ℹ️ Nenhum novo faturamento nesta verificação, mantendo acumulado do dia");
