@@ -819,6 +819,23 @@ function getFaturamentoDia() {
       Logger.log("✅ Faturamento acumulado limpo");
     }
 
+    // SINCRONIZAÇÃO AUTOMÁTICA: Atualiza aba de controle com novas OCs
+    // Isso garante que pedidos novos apareçam automaticamente na aba
+    try {
+      var doc = SpreadsheetApp.getActiveSpreadsheet();
+      var sheetControle = doc.getSheetByName("ControleFaturamento");
+
+      if (sheetControle) {
+        Logger.log("🔄 Sincronizando aba de controle com novos pedidos...");
+        sincronizarOCsNaAbaControle(sheetControle);
+      } else {
+        Logger.log("ℹ️ Aba ControleFaturamento não existe. Execute criarOuAtualizarAbaControle() para criar.");
+      }
+    } catch (erroSinc) {
+      Logger.log("⚠️ Erro ao sincronizar aba de controle: " + erroSinc.toString());
+      // Continua execução mesmo se sincronização falhar
+    }
+
     var snapshotAnterior = props.getProperty('SNAPSHOT_DADOS1');
     var timestampAnterior = props.getProperty('SNAPSHOT_TIMESTAMP');
 
@@ -1533,10 +1550,34 @@ function executarVerificacaoFaturamento() {
 }
 
 /**
- * Configura triggers automáticos (8h e 19h)
+ * Configura triggers automáticos (a cada 1 hora)
  * EXECUTE ESTA FUNÇÃO UMA VEZ PARA CONFIGURAR OS HORÁRIOS AUTOMÁTICOS
  */
 function setupTriggers() {
+  // Remove triggers antigos para evitar duplicação
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'executarVerificacaoFaturamento') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  // Cria trigger para executar A CADA 1 HORA
+  ScriptApp.newTrigger('executarVerificacaoFaturamento')
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  Logger.log("✅ Triggers configurados com sucesso!");
+  Logger.log("⏰ Verificações automáticas A CADA 1 HORA (24x por dia)");
+  Logger.log("ℹ️  Sistema detectará faturamento muito mais rápido!");
+}
+
+/**
+ * Configura triggers para 2x ao dia (8h e 19h) - MODO ECONÔMICO
+ * Use esta função se quiser menos verificações (economiza quotas do Google)
+ */
+function setupTriggers2xDia() {
   // Remove triggers antigos para evitar duplicação
   var triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(function(trigger) {
@@ -1560,7 +1601,7 @@ function setupTriggers() {
     .create();
 
   Logger.log("✅ Triggers configurados com sucesso!");
-  Logger.log("⏰ Verificações automáticas às 8h e 19h todos os dias");
+  Logger.log("⏰ Verificações automáticas às 8h e 19h (modo econômico)");
 }
 
 // ========================================
