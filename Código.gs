@@ -329,7 +329,7 @@ function lerDados1() {
     }
 
     // Pega dados a partir da linha 2 (pula cabeçalho)
-    // Agora lê 7 colunas: A=OC, B=Valor, C=Cliente, D=(vazio), E=FORNECEDOR, F=TOTAL PARES, G=TOTAL METROS
+    // Lê 7 colunas: A=OC, B=Valor, C=Cliente, D=Data Recebimento, E=FORNECEDOR, F=TOTAL PARES, G=TOTAL METROS
     var dados = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
 
     var resultado = [];
@@ -339,6 +339,7 @@ function lerDados1() {
           ordemCompra: row[0].toString().trim(),
           valor: typeof row[1] === 'number' ? row[1] : parseFloat(row[1]) || 0,
           cliente: row[2] ? row[2].toString().trim() : "Sem Cliente",
+          dataRecebimento: row[3] || null, // Coluna D (índice 3) - pode ser Date ou string
           fornecedor: row[4] ? row[4].toString().trim() : "", // Coluna E (índice 4)
           totalPares: typeof row[5] === 'number' ? row[5] : parseFloat(row[5]) || 0, // Coluna F (índice 5)
           totalMetros: typeof row[6] === 'number' ? row[6] : parseFloat(row[6]) || 0  // Coluna G (índice 6)
@@ -906,6 +907,93 @@ function getPedidosAFaturar() {
 
   } catch (erro) {
     Logger.log("❌ Erro em getPedidosAFaturar: " + erro.toString());
+    return {
+      sucesso: false,
+      timestamp: obterTimestamp(),
+      dados: [],
+      erro: erro.toString()
+    };
+  }
+}
+
+/**
+ * Retorna entradas do dia (pedidos recebidos hoje)
+ * Filtra por data de recebimento = data atual
+ */
+function getEntradasDoDia() {
+  try {
+    Logger.log("📦 Iniciando getEntradasDoDia...");
+
+    var dados = lerDados1();
+
+    if (dados.length === 0) {
+      return {
+        sucesso: true,
+        timestamp: obterTimestamp(),
+        dados: []
+      };
+    }
+
+    // Obtém a data de hoje (sem hora) para comparação
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    Logger.log("📅 Data de hoje: " + Utilities.formatDate(hoje, Session.getScriptTimeZone(), "dd/MM/yyyy"));
+
+    // Carrega mapa de marcas da aba Dados
+    var mapaOCDados = criarMapaOCDadosCompleto();
+
+    // Filtra apenas pedidos recebidos hoje
+    var resultado = [];
+    dados.forEach(function(item) {
+      if (item.dataRecebimento) {
+        // Converte data de recebimento para Date (se for string) e normaliza
+        var dataReceb;
+        if (item.dataRecebimento instanceof Date) {
+          dataReceb = new Date(item.dataRecebimento);
+        } else {
+          // Tenta converter string DD/MM/YYYY para Date
+          var partes = item.dataRecebimento.toString().split('/');
+          if (partes.length === 3) {
+            dataReceb = new Date(partes[2], partes[1] - 1, partes[0]);
+          }
+        }
+
+        if (dataReceb) {
+          dataReceb.setHours(0, 0, 0, 0);
+
+          // Compara se é hoje
+          if (dataReceb.getTime() === hoje.getTime()) {
+            // Busca a marca
+            var dadosOC = mapaOCDados[item.ordemCompra];
+            var marca = dadosOC ? dadosOC.marca : "Sem Marca";
+
+            resultado.push({
+              cliente: item.cliente,
+              marca: marca,
+              ordemCompra: item.ordemCompra,
+              dataRecebimento: Utilities.formatDate(dataReceb, Session.getScriptTimeZone(), "dd/MM/yyyy")
+            });
+          }
+        }
+      }
+    });
+
+    // Ordena por cliente (alfabético)
+    resultado.sort(function(a, b) {
+      return a.cliente.localeCompare(b.cliente);
+    });
+
+    Logger.log("✅ getEntradasDoDia concluído: " + resultado.length + " entradas hoje");
+
+    return {
+      sucesso: true,
+      timestamp: obterTimestamp(),
+      dados: resultado
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro em getEntradasDoDia: " + erro.toString());
     return {
       sucesso: false,
       timestamp: obterTimestamp(),
