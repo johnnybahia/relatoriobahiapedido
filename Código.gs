@@ -2101,3 +2101,444 @@ function deletarRegistroFaturamento(data, cliente, marca) {
     };
   }
 }
+
+// ========================================
+// SISTEMA DE ENVIO DE EMAIL AUTOMÁTICO
+// ========================================
+
+/**
+ * Cria ou verifica aba RelatoriosDiarios
+ */
+function criarOuVerificarAbaRelatoriosDiarios() {
+  var doc = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = doc.getSheetByName("RelatoriosDiarios");
+
+  if (!sheet) {
+    Logger.log("📝 Criando aba RelatoriosDiarios...");
+    sheet = doc.insertSheet("RelatoriosDiarios");
+
+    // Cabeçalho
+    sheet.getRange(1, 1, 1, 5).setValues([
+      ["Data", "Cliente", "Marca", "Valor", "Tipo"]
+    ]);
+
+    sheet.getRange(1, 1, 1, 5).setFontWeight("bold");
+    sheet.getRange(1, 1, 1, 5).setBackground("#4CAF50");
+    sheet.getRange(1, 1, 1, 5).setFontColor("#FFFFFF");
+
+    Logger.log("✅ Aba RelatoriosDiarios criada com sucesso!");
+  }
+
+  return sheet;
+}
+
+/**
+ * Salva dados diários na aba RelatoriosDiarios
+ * Chamada pelo trigger diário às 8h
+ */
+function salvarDadosDiarios() {
+  try {
+    Logger.log("📊 Iniciando salvamento de dados diários...");
+
+    var sheet = criarOuVerificarAbaRelatoriosDiarios();
+    var hoje = new Date();
+    var dataFormatada = Utilities.formatDate(hoje, Session.getScriptTimeZone(), "dd/MM/yyyy");
+
+    // 1. Pedidos a Faturar
+    var pedidos = getPedidosAFaturar();
+    if (pedidos.sucesso && pedidos.dados) {
+      pedidos.dados.forEach(function(item) {
+        sheet.appendRow([dataFormatada, item.cliente, item.marca, item.valor, "Pedido a Faturar"]);
+      });
+      Logger.log("✅ " + pedidos.dados.length + " pedidos salvos");
+    }
+
+    // 2. Entradas do Dia
+    var entradas = getEntradasDoDia();
+    if (entradas.sucesso && entradas.dados) {
+      entradas.dados.forEach(function(item) {
+        sheet.appendRow([dataFormatada, item.cliente, item.marca, item.valor, "Entrada do Dia"]);
+      });
+      Logger.log("✅ " + entradas.dados.length + " entradas salvas");
+    }
+
+    // 3. Faturamento do Dia
+    var faturamento = getUltimoFaturamento();
+    if (faturamento.sucesso && faturamento.dados) {
+      faturamento.dados.forEach(function(item) {
+        sheet.appendRow([dataFormatada, item.cliente, item.marca, item.valor, "Faturamento"]);
+      });
+      Logger.log("✅ " + faturamento.dados.length + " faturamentos salvos");
+    }
+
+    Logger.log("✅ Dados diários salvos com sucesso!");
+    return true;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao salvar dados diários: " + erro.toString());
+    return false;
+  }
+}
+
+/**
+ * Busca emails da aba "email"
+ */
+function buscarEmailsDestinatarios() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("email");
+
+    if (!sheet) {
+      Logger.log("❌ Aba 'email' não encontrada!");
+      return [];
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log("⚠️ Nenhum email cadastrado");
+      return [];
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    var emails = [];
+
+    dados.forEach(function(row) {
+      if (row[0]) {
+        emails.push(row[0].toString().trim());
+      }
+    });
+
+    Logger.log("✅ " + emails.length + " emails encontrados");
+    return emails;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao buscar emails: " + erro.toString());
+    return [];
+  }
+}
+
+/**
+ * Busca dados do dia anterior na aba RelatoriosDiarios
+ */
+function buscarDadosDiaAnterior() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+
+    if (!sheet) {
+      Logger.log("⚠️ Aba RelatoriosDiarios não encontrada");
+      return {pedidos: [], entradas: [], faturamento: []};
+    }
+
+    var ontem = new Date();
+    ontem.setDate(ontem.getDate() - 1);
+    var dataOntem = Utilities.formatDate(ontem, Session.getScriptTimeZone(), "dd/MM/yyyy");
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return {pedidos: [], entradas: [], faturamento: []};
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+
+    var pedidos = [];
+    var entradas = [];
+    var faturamento = [];
+
+    dados.forEach(function(row) {
+      if (row[0] === dataOntem) {
+        var item = {
+          cliente: row[1],
+          marca: row[2],
+          valor: row[3]
+        };
+
+        if (row[4] === "Pedido a Faturar") {
+          pedidos.push(item);
+        } else if (row[4] === "Entrada do Dia") {
+          entradas.push(item);
+        } else if (row[4] === "Faturamento") {
+          faturamento.push(item);
+        }
+      }
+    });
+
+    Logger.log("✅ Dados de ontem (" + dataOntem + "): " + pedidos.length + " pedidos, " + entradas.length + " entradas, " + faturamento.length + " faturamentos");
+
+    return {
+      pedidos: pedidos,
+      entradas: entradas,
+      faturamento: faturamento,
+      data: dataOntem
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao buscar dados de ontem: " + erro.toString());
+    return {pedidos: [], entradas: [], faturamento: []};
+  }
+}
+
+/**
+ * Calcula total da semana (segunda a domingo)
+ */
+function calcularTotalSemana() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+
+    if (!sheet) {
+      return 0;
+    }
+
+    var hoje = new Date();
+    var diaDaSemana = hoje.getDay(); // 0=domingo, 1=segunda, etc
+
+    // Calcula segunda-feira da semana atual
+    var segunda = new Date(hoje);
+    var diasAteSegunda = (diaDaSemana === 0) ? -6 : -(diaDaSemana - 1);
+    segunda.setDate(hoje.getDate() + diasAteSegunda);
+    segunda.setHours(0, 0, 0, 0);
+
+    // Calcula domingo da semana atual
+    var domingo = new Date(segunda);
+    domingo.setDate(segunda.getDate() + 6);
+    domingo.setHours(23, 59, 59, 999);
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return 0;
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    var total = 0;
+
+    dados.forEach(function(row) {
+      var dataRow = row[0];
+      if (typeof dataRow === 'string') {
+        var partes = dataRow.split('/');
+        dataRow = new Date(partes[2], partes[1] - 1, partes[0]);
+      }
+
+      if (dataRow >= segunda && dataRow <= domingo && row[4] === "Faturamento") {
+        total += row[3];
+      }
+    });
+
+    Logger.log("✅ Total da semana: R$ " + total.toFixed(2));
+    return total;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao calcular total da semana: " + erro.toString());
+    return 0;
+  }
+}
+
+/**
+ * Calcula total do mês acumulado
+ */
+function calcularTotalMes() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+
+    if (!sheet) {
+      return 0;
+    }
+
+    var hoje = new Date();
+    var mesAtual = hoje.getMonth();
+    var anoAtual = hoje.getFullYear();
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return 0;
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    var total = 0;
+
+    dados.forEach(function(row) {
+      var dataRow = row[0];
+      if (typeof dataRow === 'string') {
+        var partes = dataRow.split('/');
+        dataRow = new Date(partes[2], partes[1] - 1, partes[0]);
+      }
+
+      if (dataRow.getMonth() === mesAtual && dataRow.getFullYear() === anoAtual && row[4] === "Faturamento") {
+        total += row[3];
+      }
+    });
+
+    Logger.log("✅ Total do mês: R$ " + total.toFixed(2));
+    return total;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao calcular total do mês: " + erro.toString());
+    return 0;
+  }
+}
+
+/**
+ * Formata email HTML com os dados
+ */
+function formatarEmailRelatorio(dados, totalSemana, totalMes) {
+  var html = '<html><body style="font-family: Arial, sans-serif; color: #333;">';
+
+  html += '<p style="font-size: 16px;">Bom dia!</p>';
+  html += '<p style="font-size: 14px;">Segue informações de pedidos e Faturamento Bahia para data de <strong>' + dados.data + '</strong></p>';
+
+  // Card: Pedidos a Faturar
+  html += '<h3 style="color: #2c3e50; border-bottom: 2px solid #3498db;">💼 Pedidos a Faturar</h3>';
+  if (dados.pedidos.length > 0) {
+    html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
+    html += '<thead><tr style="background-color: #3498db; color: white;">';
+    html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Cliente</th>';
+    html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Marca</th>';
+    html += '<th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Valor</th>';
+    html += '</tr></thead><tbody>';
+
+    var totalPedidos = 0;
+    dados.pedidos.forEach(function(item) {
+      html += '<tr>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd;">' + item.cliente + '</td>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd;">' + item.marca + '</td>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+      html += '</tr>';
+      totalPedidos += item.valor;
+    });
+
+    html += '<tr style="background-color: #ecf0f1; font-weight: bold;">';
+    html += '<td colspan="2" style="padding: 10px; border: 1px solid #ddd;">TOTAL</td>';
+    html += '<td style="padding: 10px; border: 1px solid #ddd; text-align: right;">R$ ' + totalPedidos.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+    html += '</tr></tbody></table>';
+  } else {
+    html += '<p style="color: #95a5a6;">Nenhum pedido a faturar</p>';
+  }
+
+  // Card: Entradas do Dia
+  html += '<h3 style="color: #2c3e50; border-bottom: 2px solid #27ae60;">📦 Entradas do Dia</h3>';
+  if (dados.entradas.length > 0) {
+    html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
+    html += '<thead><tr style="background-color: #27ae60; color: white;">';
+    html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Cliente</th>';
+    html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Marca</th>';
+    html += '<th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Valor</th>';
+    html += '</tr></thead><tbody>';
+
+    var totalEntradas = 0;
+    dados.entradas.forEach(function(item) {
+      html += '<tr>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd;">' + item.cliente + '</td>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd;">' + item.marca + '</td>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+      html += '</tr>';
+      totalEntradas += item.valor;
+    });
+
+    html += '<tr style="background-color: #ecf0f1; font-weight: bold;">';
+    html += '<td colspan="2" style="padding: 10px; border: 1px solid #ddd;">TOTAL</td>';
+    html += '<td style="padding: 10px; border: 1px solid #ddd; text-align: right;">R$ ' + totalEntradas.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+    html += '</tr></tbody></table>';
+  } else {
+    html += '<p style="color: #95a5a6;">Nenhuma entrada no dia</p>';
+  }
+
+  // Card: Faturamento do Dia
+  html += '<h3 style="color: #2c3e50; border-bottom: 2px solid #e74c3c;">💰 Faturamento do Dia</h3>';
+  if (dados.faturamento.length > 0) {
+    html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
+    html += '<thead><tr style="background-color: #e74c3c; color: white;">';
+    html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Cliente</th>';
+    html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Marca</th>';
+    html += '<th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Valor</th>';
+    html += '</tr></thead><tbody>';
+
+    var totalFaturamento = 0;
+    dados.faturamento.forEach(function(item) {
+      html += '<tr>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd;">' + item.cliente + '</td>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd;">' + item.marca + '</td>';
+      html += '<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+      html += '</tr>';
+      totalFaturamento += item.valor;
+    });
+
+    html += '<tr style="background-color: #ecf0f1; font-weight: bold;">';
+    html += '<td colspan="2" style="padding: 10px; border: 1px solid #ddd;">TOTAL</td>';
+    html += '<td style="padding: 10px; border: 1px solid #ddd; text-align: right;">R$ ' + totalFaturamento.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+    html += '</tr></tbody></table>';
+  } else {
+    html += '<p style="color: #95a5a6;">Nenhum faturamento no dia</p>';
+  }
+
+  // Totais da Semana e Mês
+  html += '<hr style="margin: 30px 0; border: none; border-top: 2px solid #bdc3c7;">';
+  html += '<h3 style="color: #2c3e50;">📊 Resumo</h3>';
+  html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
+  html += '<tr style="background-color: #f39c12; color: white;">';
+  html += '<td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Total da Semana (Segunda a Domingo)</td>';
+  html += '<td style="padding: 12px; border: 1px solid #ddd; text-align: right; font-weight: bold;">R$ ' + totalSemana.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+  html += '</tr>';
+  html += '<tr style="background-color: #9b59b6; color: white;">';
+  html += '<td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Total do Mês Acumulado</td>';
+  html += '<td style="padding: 12px; border: 1px solid #ddd; text-align: right; font-weight: bold;">R$ ' + totalMes.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+  html += '</tr>';
+  html += '</table>';
+
+  // Assinatura
+  html += '<p style="margin-top: 30px; font-size: 14px;">Atenciosamente,<br>';
+  html += '<strong>Controle de Rotinas e Prazos Marfim</strong></p>';
+
+  html += '</body></html>';
+
+  return html;
+}
+
+/**
+ * Função principal: Envia relatório por email
+ * Deve ser configurada para rodar às 8h diariamente
+ */
+function enviarRelatorioEmail() {
+  try {
+    Logger.log("📧 Iniciando envio de relatório por email...");
+
+    // 1. Salva dados de hoje
+    salvarDadosDiarios();
+
+    // 2. Busca dados de ontem
+    var dadosOntem = buscarDadosDiaAnterior();
+
+    if (dadosOntem.pedidos.length === 0 && dadosOntem.entradas.length === 0 && dadosOntem.faturamento.length === 0) {
+      Logger.log("⚠️ Nenhum dado de ontem encontrado. Email não será enviado.");
+      return;
+    }
+
+    // 3. Calcula totais
+    var totalSemana = calcularTotalSemana();
+    var totalMes = calcularTotalMes();
+
+    // 4. Formata email
+    var htmlBody = formatarEmailRelatorio(dadosOntem, totalSemana, totalMes);
+
+    // 5. Busca emails destinatários
+    var emails = buscarEmailsDestinatarios();
+
+    if (emails.length === 0) {
+      Logger.log("⚠️ Nenhum email destinatário encontrado");
+      return;
+    }
+
+    // 6. Envia email
+    var assunto = "Pedidos e Faturamento atualizado BAHIA";
+
+    emails.forEach(function(email) {
+      MailApp.sendEmail({
+        to: email,
+        subject: assunto,
+        htmlBody: htmlBody
+      });
+      Logger.log("✅ Email enviado para: " + email);
+    });
+
+    Logger.log("🎉 Relatório enviado com sucesso para " + emails.length + " destinatários!");
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao enviar relatório: " + erro.toString());
+  }
+}
