@@ -445,6 +445,70 @@ function criarMapaOCMarca() {
 }
 
 /**
+ * Cria um mapa completo de OC com marca, pares e metros (OTIMIZADO)
+ * Agrupa múltiplas linhas da mesma OC, somando pares e metros
+ * @returns {Object} Mapa com OC como chave e {marca, pares, metros} como valor
+ */
+function criarMapaOCDadosCompleto() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Dados");
+    if (!sheet) {
+      Logger.log("⚠️ Aba 'Dados' não encontrada");
+      return {};
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log("⚠️ Aba 'Dados' vazia");
+      return {};
+    }
+
+    var numLinhas = lastRow - 1;
+    Logger.log("📥 Carregando mapa completo OC->{marca, pares, metros} de " + numLinhas + " linhas...");
+
+    // Pega todas as 10 colunas da aba Dados
+    var dados = sheet.getRange(2, 1, numLinhas, 10).getValues();
+
+    var mapa = {};
+    var contador = 0;
+
+    dados.forEach(function(row) {
+      var oc = row[9] ? row[9].toString().trim() : ""; // Coluna J (índice 9) - OC
+      var marca = row[4] ? row[4].toString().trim() : "Sem Marca"; // Coluna E (índice 4) - Marca
+      var qtd = typeof row[6] === 'number' ? row[6] : parseFloat(row[6]) || 0; // Coluna G (índice 6) - Qtd
+      var unidade = row[7] ? row[7].toString().trim().toUpperCase() : ""; // Coluna H (índice 7) - Unidade
+
+      if (oc && oc !== "") {
+        // Se a OC ainda não existe no mapa, cria entrada
+        if (!mapa[oc]) {
+          mapa[oc] = {
+            marca: marca,
+            pares: 0,
+            metros: 0
+          };
+        }
+
+        // Soma nas quantidades apropriadas (permite múltiplas linhas da mesma OC)
+        if (unidade.includes("PAR")) {
+          mapa[oc].pares += qtd;
+        } else if (unidade.includes("M") || unidade.includes("METRO")) {
+          mapa[oc].metros += qtd;
+        }
+
+        contador++;
+      }
+    });
+
+    Logger.log("✅ Mapa completo criado com " + Object.keys(mapa).length + " OCs únicas de " + numLinhas + " linhas processadas");
+    return mapa;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao criar mapa OC completo: " + erro.toString());
+    return {};
+  }
+}
+
+/**
  * Busca a marca de uma OC no mapa pré-carregado
  * @param {string} oc - Ordem de Compra
  * @param {Object} mapaOCMarca - Mapa de OC->Marca
@@ -736,26 +800,34 @@ function getPedidosAFaturar() {
 
     Logger.log("📦 " + dados.length + " registros lidos da aba Dados1");
 
-    // OTIMIZAÇÃO: Carrega todas as marcas de UMA VEZ
-    var mapaOCMarca = criarMapaOCMarca();
+    // OTIMIZAÇÃO: Carrega todas as marcas, pares e metros de UMA VEZ
+    var mapaOCDados = criarMapaOCDadosCompleto();
 
     // Agrupa por cliente+marca
     var agrupamentoMap = {};
 
     dados.forEach(function(item) {
-      // Busca a marca no mapa (rápido - O(1))
-      var marca = buscarMarcaNoMapa(item.ordemCompra, mapaOCMarca);
+      // Busca os dados completos no mapa (rápido - O(1))
+      var dadosOC = mapaOCDados[item.ordemCompra];
+      var marca = dadosOC ? dadosOC.marca : "Sem Marca";
+      var pares = dadosOC ? dadosOC.pares : 0;
+      var metros = dadosOC ? dadosOC.metros : 0;
+
       var chave = item.cliente + "|" + marca;
 
       if (!agrupamentoMap[chave]) {
         agrupamentoMap[chave] = {
           cliente: item.cliente,
           marca: marca,
-          valor: 0
+          valor: 0,
+          pares: 0,
+          metros: 0
         };
       }
 
       agrupamentoMap[chave].valor += item.valor;
+      agrupamentoMap[chave].pares += pares;
+      agrupamentoMap[chave].metros += metros;
     });
 
     // Converte para array

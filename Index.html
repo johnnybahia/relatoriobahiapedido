@@ -325,7 +325,7 @@
     /* ESTILOS PARA CARDS DE FATURAMENTO */
     .faturamento-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(650px, 1fr));
       gap: 20px;
       margin-bottom: 30px;
     }
@@ -391,6 +391,10 @@
       color: #555;
     }
 
+    .table-faturamento th.th-qtd {
+      text-align: center;
+    }
+
     .table-faturamento td {
       padding: 10px 12px;
       border-bottom: 1px solid #eee;
@@ -399,6 +403,13 @@
 
     .table-faturamento tr:hover {
       background: #f9f9f9;
+    }
+
+    .qtd-faturamento {
+      font-weight: 600;
+      color: #3498db;
+      font-size: 14px;
+      text-align: center;
     }
 
     .valor-faturamento {
@@ -1764,22 +1775,30 @@
           }
 
           var html = '<table class="table-faturamento">';
-          html += '<thead><tr><th>Cliente</th><th>Marca</th><th>Valor Total</th></tr></thead>';
+          html += '<thead><tr><th>Cliente</th><th>Marca</th><th class="th-qtd">Pares</th><th class="th-qtd">Metros</th><th>Valor Total</th></tr></thead>';
           html += '<tbody>';
 
           var totalGeral = 0;
+          var totalPares = 0;
+          var totalMetros = 0;
 
           resultado.dados.forEach(function(item) {
             html += '<tr>';
             html += '<td><b>' + item.cliente + '</b></td>';
             html += '<td><span class="marca-badge-faturamento">' + item.marca + '</span></td>';
+            html += '<td class="qtd-faturamento">' + (item.pares || 0).toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</td>';
+            html += '<td class="qtd-faturamento">' + (item.metros || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
             html += '<td class="valor-faturamento">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
             html += '</tr>';
             totalGeral += item.valor;
+            totalPares += (item.pares || 0);
+            totalMetros += (item.metros || 0);
           });
 
           html += '<tr class="total-row-faturamento">';
           html += '<td colspan="2"><strong>TOTAL GERAL</strong></td>';
+          html += '<td class="qtd-faturamento"><strong>' + totalPares.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</strong></td>';
+          html += '<td class="qtd-faturamento"><strong>' + totalMetros.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</strong></td>';
           html += '<td class="valor-faturamento">R$ ' + totalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
           html += '</tr>';
 
