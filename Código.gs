@@ -899,8 +899,8 @@ function getEntradasDoDia() {
     // Carrega mapa de marcas da aba Dados
     var mapaOCDados = criarMapaOCDadosCompleto();
 
-    // Filtra apenas pedidos recebidos hoje
-    var resultado = [];
+    // Filtra pedidos recebidos hoje e agrupa por OC
+    var mapaOC = {};
     dados.forEach(function(item) {
       if (item.dataRecebimento) {
         // Converte data de recebimento para Date (se for string) e normaliza
@@ -924,16 +924,27 @@ function getEntradasDoDia() {
             var dadosOC = mapaOCDados[item.ordemCompra];
             var marca = dadosOC ? dadosOC.marca : "Sem Marca";
 
-            resultado.push({
-              cliente: item.cliente,
-              marca: marca,
-              ordemCompra: item.ordemCompra,
-              valor: item.valor,
-              dataRecebimento: Utilities.formatDate(dataReceb, Session.getScriptTimeZone(), "dd/MM/yyyy")
-            });
+            // Agrupa por OC
+            if (!mapaOC[item.ordemCompra]) {
+              mapaOC[item.ordemCompra] = {
+                cliente: item.cliente,
+                marca: marca,
+                ordemCompra: item.ordemCompra,
+                valor: 0,
+                dataRecebimento: Utilities.formatDate(dataReceb, Session.getScriptTimeZone(), "dd/MM/yyyy")
+              };
+            }
+
+            // Soma valores da mesma OC
+            mapaOC[item.ordemCompra].valor += item.valor;
           }
         }
       }
+    });
+
+    // Converte mapa para array
+    var resultado = Object.keys(mapaOC).map(function(oc) {
+      return mapaOC[oc];
     });
 
     // Ordena por cliente (alfabético)
