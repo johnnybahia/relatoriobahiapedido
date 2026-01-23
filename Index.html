@@ -1950,17 +1950,27 @@
           }
 
           var html = '<table class="table-faturamento">';
-          html += '<thead><tr><th>Cliente</th><th>Marca</th><th>Ordem Compra</th><th>Data Receb.</th></tr></thead>';
+          html += '<thead><tr><th>Cliente</th><th>Marca</th><th>Ordem Compra</th><th>Valor</th><th>Data Receb.</th></tr></thead>';
           html += '<tbody>';
+
+          var totalGeral = 0;
 
           resultado.dados.forEach(function(item) {
             html += '<tr>';
             html += '<td><b>' + item.cliente + '</b></td>';
             html += '<td><span class="marca-badge-faturamento">' + item.marca + '</span></td>';
             html += '<td>' + item.ordemCompra + '</td>';
+            html += '<td class="valor-faturamento">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
             html += '<td>' + item.dataRecebimento + '</td>';
             html += '</tr>';
+            totalGeral += item.valor;
           });
+
+          html += '<tr class="total-row-faturamento">';
+          html += '<td colspan="3"><strong>TOTAL</strong></td>';
+          html += '<td class="valor-faturamento"><strong>R$ ' + totalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</strong></td>';
+          html += '<td></td>';
+          html += '</tr>';
 
           html += '</tbody></table>';
 
