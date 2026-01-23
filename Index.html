@@ -615,6 +615,70 @@
       font-size: 14px;
     }
 
+    /* FILTRO DE MÊS */
+    .filtro-mes-container {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .filtro-mes-container label {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .filtro-mes-container select,
+    .filtro-mes-container input[type="month"] {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      background-color: white;
+      cursor: pointer;
+    }
+
+    .filtro-mes-container select:focus,
+    .filtro-mes-container input[type="month"]:focus {
+      outline: none;
+      border-color: #2980b9;
+      box-shadow: 0 0 0 2px rgba(41, 128, 185, 0.1);
+    }
+
+    #selecionarMes {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* TOTAL DINÂMICO */
+    .total-dinamico-container {
+      background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+    }
+
+    .total-dinamico-container h3 {
+      margin: 0;
+      color: white;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .total-dinamico-container #totalDinamico {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
     /* BOTÕES DE AÇÃO NO HISTÓRICO */
     .btn-editar-historico,
     .btn-deletar-historico {
@@ -1040,6 +1104,25 @@
         <span class="close-historico" onclick="fecharHistoricoFaturamento()">&times;</span>
       </div>
       <div class="modal-body-historico">
+        <!-- Filtro de Mês -->
+        <div class="filtro-mes-container">
+          <label for="filtroMes">Filtrar por:</label>
+          <select id="filtroMes" onchange="aplicarFiltroMes()">
+            <option value="tudo">Tudo</option>
+            <option value="mes">Mês Atual</option>
+          </select>
+
+          <div id="selecionarMes" style="display:none;">
+            <label for="mesAno">Selecione o mês:</label>
+            <input type="month" id="mesAno" onchange="aplicarFiltroMes()">
+          </div>
+        </div>
+
+        <!-- Total Dinâmico -->
+        <div class="total-dinamico-container">
+          <h3>Total do Período: <span id="totalDinamico">R$ 0,00</span></h3>
+        </div>
+
         <div id="conteudoHistorico">
           <div class="loading-faturamento">Carregando histórico...</div>
         </div>
@@ -1964,6 +2047,17 @@
     function abrirHistoricoFaturamento() {
       addDebugLog("📊 Abrindo modal de histórico de faturamentos...");
       document.getElementById('modalHistorico').style.display = 'block';
+
+      // Define mês atual por padrão
+      var hoje = new Date();
+      var mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
+      var anoAtual = hoje.getFullYear();
+      document.getElementById('mesAno').value = anoAtual + '-' + mesAtual;
+
+      // Define filtro como "mes" por padrão
+      document.getElementById('filtroMes').value = 'mes';
+      document.getElementById('selecionarMes').style.display = 'flex';
+
       carregarHistoricoFaturamento();
     }
 
@@ -1980,6 +2074,9 @@
       }
     }
 
+    // Variável global para armazenar todos os dados do histórico
+    var todosOsDadosHistorico = [];
+
     // Carrega o histórico de faturamentos da planilha
     function carregarHistoricoFaturamento() {
       addDebugLog("📥 Carregando histórico de faturamentos...");
@@ -1993,86 +2090,154 @@
             var mensagem = resultado.mensagem || 'Nenhum histórico disponível ainda.';
             document.getElementById('conteudoHistorico').innerHTML =
               '<div class="empty-historico">📭 ' + mensagem + '</div>';
+            document.getElementById('totalDinamico').textContent = 'R$ 0,00';
             return;
           }
 
-          // Agrupa por data
-          var dadosPorData = {};
-          resultado.dados.forEach(function(item) {
-            if (!dadosPorData[item.data]) {
-              dadosPorData[item.data] = [];
-            }
-            dadosPorData[item.data].push(item);
-          });
+          // Armazena todos os dados
+          todosOsDadosHistorico = resultado.dados;
 
-          // Renderiza tabela
-          var html = '<table class="historico-tabela">';
-          html += '<thead><tr>';
-          html += '<th>Data</th>';
-          html += '<th>Cliente</th>';
-          html += '<th>Marca</th>';
-          html += '<th>Valor Faturado</th>';
-          html += '<th>Observação</th>';
-          html += '<th style="text-align:center;">Ações</th>';
-          html += '</tr></thead>';
-          html += '<tbody>';
-
-          // Ordena datas (mais recentes primeiro)
-          var datas = Object.keys(dadosPorData).sort(function(a, b) {
-            var partesA = a.split('/');
-            var partesB = b.split('/');
-            var dataA = new Date(partesA[2], partesA[1] - 1, partesA[0]);
-            var dataB = new Date(partesB[2], partesB[1] - 1, partesB[0]);
-            return dataB - dataA;
-          });
-
-          datas.forEach(function(data) {
-            var itensDia = dadosPorData[data];
-            var totalDia = 0;
-
-            // Cabeçalho do dia
-            html += '<tr class="data-grupo">';
-            html += '<td colspan="6">📅 ' + data + '</td>';
-            html += '</tr>';
-
-            // Itens do dia
-            itensDia.forEach(function(item) {
-              var dataEscapada = item.data.replace(/'/g, "\\'");
-              var clienteEscapado = item.cliente.replace(/'/g, "\\'");
-              var marcaEscapada = item.marca.replace(/'/g, "\\'");
-              var observacaoTexto = item.observacao || "";
-
-              html += '<tr>';
-              html += '<td></td>';
-              html += '<td><b>' + item.cliente + '</b></td>';
-              html += '<td><span class="marca-badge-faturamento">' + item.marca + '</span></td>';
-              html += '<td class="valor-faturamento">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
-              html += '<td class="observacao-cell">' + observacaoTexto + '</td>';
-              html += '<td style="text-align:center;">';
-              html += '<button class="btn-editar-historico" onclick="abrirModalEdicao(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\', ' + item.valor + ', \'' + observacaoTexto.replace(/'/g, "\\'") + '\')">✏️ Editar</button>';
-              html += '<button class="btn-deletar-historico" onclick="deletarRegistro(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\')">🗑️ Deletar</button>';
-              html += '</td>';
-              html += '</tr>';
-              totalDia += item.valor;
-            });
-
-            // Total do dia
-            html += '<tr class="total-dia">';
-            html += '<td colspan="5"><strong>Total do dia ' + data + '</strong></td>';
-            html += '<td class="valor-faturamento">R$ ' + totalDia.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
-            html += '</tr>';
-          });
-
-          html += '</tbody></table>';
-
-          document.getElementById('conteudoHistorico').innerHTML = html;
+          // Aplica filtro inicial (mês atual por padrão)
+          aplicarFiltroMes();
         })
         .withFailureHandler(function(error) {
           addDebugLog("❌ Erro ao carregar histórico: " + error.message, "error");
           document.getElementById('conteudoHistorico').innerHTML =
             '<div class="empty-historico">❌ Erro ao carregar histórico: ' + error.message + '</div>';
+          document.getElementById('totalDinamico').textContent = 'R$ 0,00';
         })
         .getHistoricoFaturamento();
+    }
+
+    // Aplica o filtro de mês
+    function aplicarFiltroMes() {
+      var filtro = document.getElementById('filtroMes').value;
+      var dadosFiltrados = [];
+
+      if (filtro === 'tudo') {
+        // Mostra todos os dados
+        dadosFiltrados = todosOsDadosHistorico;
+        document.getElementById('selecionarMes').style.display = 'none';
+      } else if (filtro === 'mes') {
+        // Mostra dados do mês selecionado
+        document.getElementById('selecionarMes').style.display = 'flex';
+
+        var mesAno = document.getElementById('mesAno').value;
+        if (!mesAno) {
+          // Define mês atual por padrão
+          var hoje = new Date();
+          var mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
+          var anoAtual = hoje.getFullYear();
+          mesAno = anoAtual + '-' + mesAtual;
+          document.getElementById('mesAno').value = mesAno;
+        }
+
+        var partesMesAno = mesAno.split('-');
+        var anoFiltro = parseInt(partesMesAno[0]);
+        var mesFiltro = parseInt(partesMesAno[1]);
+
+        // Filtra dados do mês/ano selecionado
+        dadosFiltrados = todosOsDadosHistorico.filter(function(item) {
+          var partesData = item.data.split('/');
+          var diaItem = parseInt(partesData[0]);
+          var mesItem = parseInt(partesData[1]);
+          var anoItem = parseInt(partesData[2]);
+
+          return anoItem === anoFiltro && mesItem === mesFiltro;
+        });
+      }
+
+      // Renderiza os dados filtrados
+      renderizarHistorico(dadosFiltrados);
+    }
+
+    // Renderiza o histórico com os dados fornecidos
+    function renderizarHistorico(dados) {
+      if (dados.length === 0) {
+        document.getElementById('conteudoHistorico').innerHTML =
+          '<div class="empty-historico">📭 Nenhum registro encontrado para este período.</div>';
+        document.getElementById('totalDinamico').textContent = 'R$ 0,00';
+        return;
+      }
+
+      // Agrupa por data
+      var dadosPorData = {};
+      dados.forEach(function(item) {
+        if (!dadosPorData[item.data]) {
+          dadosPorData[item.data] = [];
+        }
+        dadosPorData[item.data].push(item);
+      });
+
+      // Renderiza tabela
+      var html = '<table class="historico-tabela">';
+      html += '<thead><tr>';
+      html += '<th>Data</th>';
+      html += '<th>Cliente</th>';
+      html += '<th>Marca</th>';
+      html += '<th>Valor Faturado</th>';
+      html += '<th>Observação</th>';
+      html += '<th style="text-align:center;">Ações</th>';
+      html += '</tr></thead>';
+      html += '<tbody>';
+
+      // Ordena datas (mais recentes primeiro)
+      var datas = Object.keys(dadosPorData).sort(function(a, b) {
+        var partesA = a.split('/');
+        var partesB = b.split('/');
+        var dataA = new Date(partesA[2], partesA[1] - 1, partesA[0]);
+        var dataB = new Date(partesB[2], partesB[1] - 1, partesB[0]);
+        return dataB - dataA;
+      });
+
+      var totalGeral = 0;
+
+      datas.forEach(function(data) {
+        var itensDia = dadosPorData[data];
+        var totalDia = 0;
+
+        // Cabeçalho do dia
+        html += '<tr class="data-grupo">';
+        html += '<td colspan="6">📅 ' + data + '</td>';
+        html += '</tr>';
+
+        // Itens do dia
+        itensDia.forEach(function(item) {
+          var dataEscapada = item.data.replace(/'/g, "\\'");
+          var clienteEscapado = item.cliente.replace(/'/g, "\\'");
+          var marcaEscapada = item.marca.replace(/'/g, "\\'");
+          var observacaoTexto = item.observacao || "";
+
+          html += '<tr>';
+          html += '<td></td>';
+          html += '<td><b>' + item.cliente + '</b></td>';
+          html += '<td><span class="marca-badge-faturamento">' + item.marca + '</span></td>';
+          html += '<td class="valor-faturamento">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+          html += '<td class="observacao-cell">' + observacaoTexto + '</td>';
+          html += '<td style="text-align:center;">';
+          html += '<button class="btn-editar-historico" onclick="abrirModalEdicao(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\', ' + item.valor + ', \'' + observacaoTexto.replace(/'/g, "\\'") + '\')">✏️ Editar</button>';
+          html += '<button class="btn-deletar-historico" onclick="deletarRegistro(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\')">🗑️ Deletar</button>';
+          html += '</td>';
+          html += '</tr>';
+          totalDia += item.valor;
+        });
+
+        // Total do dia
+        html += '<tr class="total-dia">';
+        html += '<td colspan="5"><strong>Total do dia ' + data + '</strong></td>';
+        html += '<td class="valor-faturamento">R$ ' + totalDia.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+        html += '</tr>';
+
+        totalGeral += totalDia;
+      });
+
+      html += '</tbody></table>';
+
+      document.getElementById('conteudoHistorico').innerHTML = html;
+
+      // Atualiza total dinâmico
+      document.getElementById('totalDinamico').textContent =
+        'R$ ' + totalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
     // ========================================
