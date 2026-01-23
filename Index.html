@@ -928,6 +928,17 @@
           </div>
         </div>
 
+        <!-- CARD: ENTRADAS DO DIA -->
+        <div class="card-faturamento">
+          <div class="card-header-faturamento">
+            <h3>📦 Entradas do Dia</h3>
+            <span class="timestamp-faturamento" id="timestampEntradas">Carregando...</span>
+          </div>
+          <div class="card-body-faturamento" id="listaEntradas">
+            <div class="loading-faturamento">Carregando dados...</div>
+          </div>
+        </div>
+
         <!-- CARD: FATURAMENTO DO DIA -->
         <div class="card-faturamento">
           <div class="card-header-faturamento">
@@ -1265,11 +1276,13 @@
 
       // 5. Carrega cards de faturamento
       carregarPedidosAFaturar();
+      carregarEntradasDoDia();
       carregarFaturamentoDia();
 
       // 6. Atualiza cards de faturamento a cada 5 minutos
       setInterval(function() {
         carregarPedidosAFaturar();
+        carregarEntradasDoDia();
         carregarFaturamentoDia();
       }, 5 * 60 * 1000);
     }
@@ -1831,6 +1844,54 @@
             '<div class="empty-state-faturamento"><div class="empty-state-icon-faturamento">❌</div>Erro: ' + error.message + '</div>';
         })
         .getPedidosAFaturar();
+    }
+
+    // Carrega dados de Entradas do Dia
+    function carregarEntradasDoDia() {
+      addDebugLog("📦 Carregando Entradas do Dia...");
+      document.getElementById('listaEntradas').innerHTML = '<div class="loading-faturamento">Carregando...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          addDebugLog("✅ Entradas do Dia recebidas: " + (resultado.dados ? resultado.dados.length : 0) + " entradas", "success");
+
+          if (!resultado.sucesso) {
+            document.getElementById('listaEntradas').innerHTML =
+              '<div class="empty-state-faturamento"><div class="empty-state-icon-faturamento">⚠️</div>Erro ao carregar dados</div>';
+            return;
+          }
+
+          document.getElementById('timestampEntradas').textContent = resultado.timestamp;
+
+          if (!resultado.dados || resultado.dados.length === 0) {
+            document.getElementById('listaEntradas').innerHTML =
+              '<div class="empty-state-faturamento"><div class="empty-state-icon-faturamento">📭</div>Nenhuma entrada hoje</div>';
+            return;
+          }
+
+          var html = '<table class="table-faturamento">';
+          html += '<thead><tr><th>Cliente</th><th>Marca</th><th>Ordem Compra</th><th>Data Receb.</th></tr></thead>';
+          html += '<tbody>';
+
+          resultado.dados.forEach(function(item) {
+            html += '<tr>';
+            html += '<td><b>' + item.cliente + '</b></td>';
+            html += '<td><span class="marca-badge-faturamento">' + item.marca + '</span></td>';
+            html += '<td>' + item.ordemCompra + '</td>';
+            html += '<td>' + item.dataRecebimento + '</td>';
+            html += '</tr>';
+          });
+
+          html += '</tbody></table>';
+
+          document.getElementById('listaEntradas').innerHTML = html;
+        })
+        .withFailureHandler(function(error) {
+          addDebugLog("❌ Erro ao carregar Entradas do Dia: " + error.message, "error");
+          document.getElementById('listaEntradas').innerHTML =
+            '<div class="empty-state-faturamento"><div class="empty-state-icon-faturamento">❌</div>Erro: ' + error.message + '</div>';
+        })
+        .getEntradasDoDia();
     }
 
     // Carrega dados do Faturamento do Dia
