@@ -329,8 +329,8 @@ function lerDados1() {
     }
 
     // Pega dados a partir da linha 2 (pula cabeçalho)
-    // Lê 7 colunas: A=OC, B=Valor, C=Cliente, D=Data Recebimento, E=FORNECEDOR, F=TOTAL PARES, G=TOTAL METROS
-    var dados = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+    // Lê 6 colunas: A=OC, B=Valor, C=Cliente, D=Data Recebimento, E=UNIDADE, F=QUANTIDADE
+    var dados = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
 
     var resultado = [];
     dados.forEach(function(row) {
@@ -340,9 +340,8 @@ function lerDados1() {
           valor: typeof row[1] === 'number' ? row[1] : parseFloat(row[1]) || 0,
           cliente: row[2] ? row[2].toString().trim() : "Sem Cliente",
           dataRecebimento: row[3] || null, // Coluna D (índice 3) - pode ser Date ou string
-          fornecedor: row[4] ? row[4].toString().trim() : "", // Coluna E (índice 4)
-          totalPares: typeof row[5] === 'number' ? row[5] : parseFloat(row[5]) || 0, // Coluna F (índice 5)
-          totalMetros: typeof row[6] === 'number' ? row[6] : parseFloat(row[6]) || 0  // Coluna G (índice 6)
+          unidade: row[4] ? row[4].toString().trim().toUpperCase() : "", // Coluna E (índice 4) - CM ou MM
+          quantidade: typeof row[5] === 'number' ? row[5] : parseFloat(row[5]) || 0  // Coluna F (índice 5)
         });
       }
     });
@@ -805,25 +804,10 @@ function getPedidosAFaturar() {
 
     Logger.log("📦 " + dados.length + " registros lidos da aba Dados1");
 
-    // Cria mapa de FORNECEDOR -> {pares, metros} únicos da aba Dados1
-    var mapaFornecedor = {};
-    dados.forEach(function(item) {
-      if (item.fornecedor) {
-        var fornecedor = item.fornecedor;
-        if (!mapaFornecedor[fornecedor]) {
-          mapaFornecedor[fornecedor] = {
-            pares: item.totalPares,
-            metros: item.totalMetros
-          };
-        }
-        // Se já existe, mantém o primeiro valor (são únicos por fornecedor)
-      }
-    });
-
     // OTIMIZAÇÃO: Carrega todas as marcas de UMA VEZ
     var mapaOCDados = criarMapaOCDadosCompleto();
 
-    // Agrupa por cliente+marca (apenas valores)
+    // Agrupa por cliente+marca, somando valores, pares e metros
     var agrupamentoMap = {};
 
     dados.forEach(function(item) {
@@ -837,27 +821,28 @@ function getPedidosAFaturar() {
         agrupamentoMap[chave] = {
           cliente: item.cliente,
           marca: marca,
-          valor: 0
+          valor: 0,
+          pares: 0,
+          metros: 0
         };
       }
 
+      // Soma valores
       agrupamentoMap[chave].valor += item.valor;
+
+      // Soma pares ou metros baseado na UNIDADE
+      if (item.unidade.includes("CM")) {
+        // CM = pares
+        agrupamentoMap[chave].pares += item.quantidade;
+      } else if (item.unidade.includes("MM")) {
+        // MM = metros
+        agrupamentoMap[chave].metros += item.quantidade;
+      }
     });
 
-    // Converte para array e associa pares/metros do fornecedor
+    // Converte para array
     var resultado = Object.keys(agrupamentoMap).map(function(chave) {
-      var item = agrupamentoMap[chave];
-
-      // Busca pares/metros comparando cliente com fornecedor
-      var dadosFornecedor = mapaFornecedor[item.cliente];
-
-      return {
-        cliente: item.cliente,
-        marca: item.marca,
-        valor: item.valor,
-        pares: dadosFornecedor ? dadosFornecedor.pares : 0,
-        metros: dadosFornecedor ? dadosFornecedor.metros : 0
-      };
+      return agrupamentoMap[chave];
     });
 
     // Ordena por cliente (alfabético) e depois por valor (maior primeiro)
@@ -866,35 +851,6 @@ function getPedidosAFaturar() {
         return a.cliente.localeCompare(b.cliente);
       }
       return b.valor - a.valor;
-    });
-
-    // Conta quantas linhas cada cliente tem para calcular rowspan
-    var contagemCliente = {};
-    resultado.forEach(function(item) {
-      contagemCliente[item.cliente] = (contagemCliente[item.cliente] || 0) + 1;
-    });
-
-    // Calcula linha do meio para cada cliente e adiciona rowspan
-    var clienteAnterior = null;
-    var indiceCliente = 0;
-    resultado.forEach(function(item, index) {
-      if (item.cliente !== clienteAnterior) {
-        // Primeira linha do cliente
-        var numLinhas = contagemCliente[item.cliente];
-        var linhaMeio = Math.floor(numLinhas / 2); // Linha do meio (0-indexed)
-
-        item.primeiraLinhaCliente = true;
-        item.rowspan = numLinhas;
-        item.linhaMeioCliente = (indiceCliente === linhaMeio);
-
-        clienteAnterior = item.cliente;
-        indiceCliente = 0;
-      } else {
-        // Demais linhas do cliente
-        item.primeiraLinhaCliente = false;
-        item.linhaMeioCliente = (indiceCliente === Math.floor(contagemCliente[item.cliente] / 2));
-        indiceCliente++;
-      }
     });
 
     Logger.log("✅ getPedidosAFaturar concluído: " + resultado.length + " linhas (cliente+marca)");
