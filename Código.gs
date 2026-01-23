@@ -928,6 +928,7 @@ function getEntradasDoDia() {
               cliente: item.cliente,
               marca: marca,
               ordemCompra: item.ordemCompra,
+              valor: item.valor,
               dataRecebimento: Utilities.formatDate(dataReceb, Session.getScriptTimeZone(), "dd/MM/yyyy")
             });
           }
