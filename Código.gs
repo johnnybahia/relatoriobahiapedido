@@ -867,11 +867,33 @@ function getPedidosAFaturar() {
       return b.valor - a.valor;
     });
 
-    // Marca a primeira linha de cada cliente para o frontend mostrar pares/metros
-    var clienteAnterior = null;
+    // Conta quantas linhas cada cliente tem para calcular rowspan
+    var contagemCliente = {};
     resultado.forEach(function(item) {
-      item.mostrarParesMetros = (item.cliente !== clienteAnterior);
-      clienteAnterior = item.cliente;
+      contagemCliente[item.cliente] = (contagemCliente[item.cliente] || 0) + 1;
+    });
+
+    // Calcula linha do meio para cada cliente e adiciona rowspan
+    var clienteAnterior = null;
+    var indiceCliente = 0;
+    resultado.forEach(function(item, index) {
+      if (item.cliente !== clienteAnterior) {
+        // Primeira linha do cliente
+        var numLinhas = contagemCliente[item.cliente];
+        var linhaMeio = Math.floor(numLinhas / 2); // Linha do meio (0-indexed)
+
+        item.primeiraLinhaCliente = true;
+        item.rowspan = numLinhas;
+        item.linhaMeioCliente = (indiceCliente === linhaMeio);
+
+        clienteAnterior = item.cliente;
+        indiceCliente = 0;
+      } else {
+        // Demais linhas do cliente
+        item.primeiraLinhaCliente = false;
+        item.linhaMeioCliente = (indiceCliente === Math.floor(contagemCliente[item.cliente] / 2));
+        indiceCliente++;
+      }
     });
 
     Logger.log("✅ getPedidosAFaturar concluído: " + resultado.length + " linhas (cliente+marca)");

@@ -421,6 +421,7 @@
       color: #3498db;
       font-size: 14px;
       text-align: center;
+      vertical-align: middle;
     }
 
     .valor-faturamento {
@@ -1799,16 +1800,15 @@
             html += '<td><span class="marca-badge-faturamento">' + item.marca + '</span></td>';
             html += '<td class="valor-faturamento">R$ ' + item.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
 
-            // Mostra pares/metros apenas na primeira linha do cliente
-            if (item.mostrarParesMetros) {
-              html += '<td class="qtd-faturamento-center">' + (item.pares || 0).toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</td>';
-              html += '<td class="qtd-faturamento-center">' + (item.metros || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+            // Usa rowspan para centralizar verticalmente os valores de Pares/Metros
+            if (item.primeiraLinhaCliente) {
+              // Primeira linha do cliente: adiciona células com rowspan
+              html += '<td class="qtd-faturamento-center" rowspan="' + item.rowspan + '">' + (item.pares || 0).toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</td>';
+              html += '<td class="qtd-faturamento-center" rowspan="' + item.rowspan + '">' + (item.metros || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
               totalPares += (item.pares || 0);
               totalMetros += (item.metros || 0);
-            } else {
-              html += '<td class="qtd-faturamento-center"></td>';
-              html += '<td class="qtd-faturamento-center"></td>';
             }
+            // Demais linhas: não renderiza células (rowspan já ocupa o espaço)
 
             html += '</tr>';
             totalGeral += item.valor;
