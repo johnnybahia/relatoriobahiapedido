@@ -329,7 +329,8 @@ function lerDados1() {
     }
 
     // Pega dados a partir da linha 2 (pula cabeçalho)
-    var dados = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+    // Agora lê 7 colunas: A=OC, B=Valor, C=Cliente, D=(vazio), E=FORNECEDOR, F=TOTAL PARES, G=TOTAL METROS
+    var dados = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
 
     var resultado = [];
     dados.forEach(function(row) {
@@ -337,7 +338,10 @@ function lerDados1() {
         resultado.push({
           ordemCompra: row[0].toString().trim(),
           valor: typeof row[1] === 'number' ? row[1] : parseFloat(row[1]) || 0,
-          cliente: row[2] ? row[2].toString().trim() : "Sem Cliente"
+          cliente: row[2] ? row[2].toString().trim() : "Sem Cliente",
+          fornecedor: row[4] ? row[4].toString().trim() : "", // Coluna E (índice 4)
+          totalPares: typeof row[5] === 'number' ? row[5] : parseFloat(row[5]) || 0, // Coluna F (índice 5)
+          totalMetros: typeof row[6] === 'number' ? row[6] : parseFloat(row[6]) || 0  // Coluna G (índice 6)
         });
       }
     });
@@ -800,18 +804,31 @@ function getPedidosAFaturar() {
 
     Logger.log("📦 " + dados.length + " registros lidos da aba Dados1");
 
-    // OTIMIZAÇÃO: Carrega todas as marcas, pares e metros de UMA VEZ
+    // Cria mapa de FORNECEDOR -> {pares, metros} únicos da aba Dados1
+    var mapaFornecedor = {};
+    dados.forEach(function(item) {
+      if (item.fornecedor) {
+        var fornecedor = item.fornecedor;
+        if (!mapaFornecedor[fornecedor]) {
+          mapaFornecedor[fornecedor] = {
+            pares: item.totalPares,
+            metros: item.totalMetros
+          };
+        }
+        // Se já existe, mantém o primeiro valor (são únicos por fornecedor)
+      }
+    });
+
+    // OTIMIZAÇÃO: Carrega todas as marcas de UMA VEZ
     var mapaOCDados = criarMapaOCDadosCompleto();
 
-    // Agrupa por cliente+marca
+    // Agrupa por cliente+marca (apenas valores)
     var agrupamentoMap = {};
 
     dados.forEach(function(item) {
-      // Busca os dados completos no mapa (rápido - O(1))
+      // Busca a marca no mapa (rápido - O(1))
       var dadosOC = mapaOCDados[item.ordemCompra];
       var marca = dadosOC ? dadosOC.marca : "Sem Marca";
-      var pares = dadosOC ? dadosOC.pares : 0;
-      var metros = dadosOC ? dadosOC.metros : 0;
 
       var chave = item.cliente + "|" + marca;
 
@@ -819,20 +836,27 @@ function getPedidosAFaturar() {
         agrupamentoMap[chave] = {
           cliente: item.cliente,
           marca: marca,
-          valor: 0,
-          pares: 0,
-          metros: 0
+          valor: 0
         };
       }
 
       agrupamentoMap[chave].valor += item.valor;
-      agrupamentoMap[chave].pares += pares;
-      agrupamentoMap[chave].metros += metros;
     });
 
-    // Converte para array
+    // Converte para array e associa pares/metros do fornecedor
     var resultado = Object.keys(agrupamentoMap).map(function(chave) {
-      return agrupamentoMap[chave];
+      var item = agrupamentoMap[chave];
+
+      // Busca pares/metros comparando cliente com fornecedor
+      var dadosFornecedor = mapaFornecedor[item.cliente];
+
+      return {
+        cliente: item.cliente,
+        marca: item.marca,
+        valor: item.valor,
+        pares: dadosFornecedor ? dadosFornecedor.pares : 0,
+        metros: dadosFornecedor ? dadosFornecedor.metros : 0
+      };
     });
 
     // Ordena por cliente (alfabético) e depois por valor (maior primeiro)
@@ -841,6 +865,13 @@ function getPedidosAFaturar() {
         return a.cliente.localeCompare(b.cliente);
       }
       return b.valor - a.valor;
+    });
+
+    // Marca a primeira linha de cada cliente para o frontend mostrar pares/metros
+    var clienteAnterior = null;
+    resultado.forEach(function(item) {
+      item.mostrarParesMetros = (item.cliente !== clienteAnterior);
+      clienteAnterior = item.cliente;
     });
 
     Logger.log("✅ getPedidosAFaturar concluído: " + resultado.length + " linhas (cliente+marca)");
