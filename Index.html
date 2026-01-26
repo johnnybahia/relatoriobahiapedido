@@ -2616,6 +2616,15 @@
 
       google.script.run
         .withSuccessHandler(function(resultado) {
+          addDebugLog("📦 Resposta recebida do servidor");
+          console.log("Resultado getDemandaPorMarca:", resultado);
+
+          if (!resultado) {
+            container.innerHTML = '<div class="demanda-empty">❌ Resposta vazia do servidor</div>';
+            addDebugLog("❌ Resposta vazia do servidor", "error");
+            return;
+          }
+
           if (resultado.status === "erro") {
             container.innerHTML = '<div class="demanda-empty">❌ ' + resultado.mensagem + '</div>';
             addDebugLog("❌ Erro ao carregar demanda: " + resultado.mensagem, "error");
@@ -2627,15 +2636,17 @@
           document.getElementById('demandaTotalRegistros').textContent = 'Total: ' + resultado.totalRegistros + ' registros';
 
           // Guarda dados para filtro
-          dadosDemandaOriginal = resultado.dados;
+          dadosDemandaOriginal = resultado.dados || [];
 
           // Renderiza tabela
-          renderizarTabelaDemanda(resultado.cabecalho, resultado.dados);
+          renderizarTabelaDemanda(resultado.cabecalho || [], resultado.dados || []);
           addDebugLog("✅ Demanda por marca carregada: " + resultado.totalRegistros + " registros", "success");
         })
         .withFailureHandler(function(error) {
-          container.innerHTML = '<div class="demanda-empty">❌ Erro ao carregar dados: ' + error.message + '</div>';
-          addDebugLog("❌ Erro ao carregar demanda: " + error.message, "error");
+          console.error("Erro getDemandaPorMarca:", error);
+          var mensagemErro = error && error.message ? error.message : "Erro desconhecido";
+          container.innerHTML = '<div class="demanda-empty">❌ Erro ao carregar dados: ' + mensagemErro + '</div>';
+          addDebugLog("❌ Erro ao carregar demanda: " + mensagemErro, "error");
         })
         .getDemandaPorMarca();
     }
