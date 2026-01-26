@@ -2765,6 +2765,8 @@ function getDemandaPorMarca() {
     var lastRow = sheet.getLastRow();
     var lastCol = sheet.getLastColumn();
 
+    Logger.log("📊 Aba encontrada: " + lastRow + " linhas, " + lastCol + " colunas");
+
     if (lastRow < 1 || lastCol < 1) {
       Logger.log("⚠️ Aba TOTAL_FABRICA está vazia");
       return {
@@ -2773,8 +2775,16 @@ function getDemandaPorMarca() {
       };
     }
 
-    // Busca cabeçalho (primeira linha)
-    var cabecalho = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    // Busca cabeçalho (primeira linha) e formata datas
+    var cabecalhoRaw = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var cabecalho = cabecalhoRaw.map(function(celula) {
+      if (celula instanceof Date) {
+        return Utilities.formatDate(celula, Session.getScriptTimeZone(), "dd/MM/yyyy");
+      }
+      return celula !== null && celula !== undefined ? String(celula) : "";
+    });
+
+    Logger.log("📋 Cabeçalho: " + JSON.stringify(cabecalho));
 
     // Busca dados (a partir da linha 2)
     var dados = [];
@@ -2782,14 +2792,15 @@ function getDemandaPorMarca() {
       dados = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
     }
 
-    // Formata as datas para exibição
+    // Formata as datas e valores para exibição
     var dadosFormatados = dados.map(function(linha) {
-      return linha.map(function(celula, index) {
+      return linha.map(function(celula) {
         // Se for uma data, formata
         if (celula instanceof Date) {
           return Utilities.formatDate(celula, Session.getScriptTimeZone(), "dd/MM/yyyy");
         }
-        return celula;
+        // Retorna valor ou string vazia
+        return celula !== null && celula !== undefined ? celula : "";
       });
     });
 
