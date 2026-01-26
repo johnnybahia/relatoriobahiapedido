@@ -2738,3 +2738,106 @@ function salvarDadosHojeManualmente() {
     Logger.log("❌ Erro: " + erro.toString());
   }
 }
+
+/**
+ * Função de TESTE FORÇADO - Envia email com dados de HOJE (não espera dia anterior)
+ * Use APENAS para testar se o sistema está funcionando
+ */
+function testarEnvioEmailComDadosDeHoje() {
+  try {
+    Logger.log("🧪 === TESTE FORÇADO COM DADOS DE HOJE ===");
+
+    // Busca emails
+    var emails = buscarEmailsDestinatarios();
+    if (emails.length === 0) {
+      Logger.log("❌ Nenhum email encontrado na aba 'email'");
+      return;
+    }
+
+    Logger.log("📧 Emails encontrados: " + emails.join(", "));
+
+    // Busca dados de HOJE (não ontem)
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+    if (!sheet) {
+      Logger.log("❌ Aba RelatoriosDiarios não encontrada");
+      return;
+    }
+
+    var hoje = new Date();
+    var dataHoje = Utilities.formatDate(hoje, Session.getScriptTimeZone(), "dd/MM/yyyy");
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log("❌ Aba RelatoriosDiarios está vazia");
+      return;
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+
+    var pedidos = [];
+    var entradas = [];
+    var faturamento = [];
+
+    dados.forEach(function(row) {
+      if (row[0] === dataHoje) {
+        var item = {
+          cliente: row[1],
+          marca: row[2],
+          valor: row[3]
+        };
+
+        if (row[4] === "Pedido a Faturar") {
+          pedidos.push(item);
+        } else if (row[4] === "Entrada do Dia") {
+          entradas.push(item);
+        } else if (row[4] === "Faturamento") {
+          faturamento.push(item);
+        }
+      }
+    });
+
+    Logger.log("📊 Dados de HOJE (" + dataHoje + "): " + pedidos.length + " pedidos, " + entradas.length + " entradas, " + faturamento.length + " faturamentos");
+
+    var totalItens = pedidos.length + entradas.length + faturamento.length;
+
+    if (totalItens === 0) {
+      Logger.log("⚠️ Nenhum dado de hoje encontrado. Execute: salvarDadosHojeManualmente()");
+      return;
+    }
+
+    var dadosEmail = {
+      pedidos: pedidos,
+      entradas: entradas,
+      faturamento: faturamento,
+      data: dataHoje
+    };
+
+    // Calcula totais
+    var totalSemana = calcularTotalSemana();
+    var totalMes = calcularTotalMes();
+
+    Logger.log("💰 Total semana: R$ " + totalSemana.toFixed(2));
+    Logger.log("💰 Total mês: R$ " + totalMes.toFixed(2));
+
+    // Formata email
+    var htmlBody = formatarEmailRelatorio(dadosEmail, totalSemana, totalMes);
+    var assunto = "Pedidos e Faturamento atualizado BAHIA - TESTE COM DADOS DE HOJE";
+
+    // Envia
+    emails.forEach(function(email) {
+      MailApp.sendEmail({
+        to: email,
+        subject: assunto,
+        htmlBody: htmlBody
+      });
+      Logger.log("✅ Email de TESTE enviado para: " + email);
+    });
+
+    Logger.log("🎉 Email de teste enviado com sucesso!");
+    Logger.log("📬 Verifique sua caixa de entrada (pode demorar alguns minutos)");
+    Logger.log("⚠️ ATENÇÃO: Este email contém dados de HOJE, não de ontem!");
+
+  } catch (erro) {
+    Logger.log("❌ Erro no teste: " + erro.toString());
+  }
+}
