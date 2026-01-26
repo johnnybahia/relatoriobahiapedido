@@ -2738,3 +2738,76 @@ function salvarDadosHojeManualmente() {
     Logger.log("❌ Erro: " + erro.toString());
   }
 }
+
+// ========================================
+// DEMANDA POR MARCA - TOTAL_FABRICA
+// ========================================
+
+/**
+ * Busca dados da aba TOTAL_FABRICA para exibir demanda por marca/cliente
+ * @returns {Object} Dados da demanda por marca com cabeçalho e linhas
+ */
+function getDemandaPorMarca() {
+  try {
+    Logger.log("📊 Buscando dados de demanda por marca (TOTAL_FABRICA)...");
+
+    var doc = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = doc.getSheetByName("TOTAL_FABRICA");
+
+    if (!sheet) {
+      Logger.log("❌ Aba 'TOTAL_FABRICA' não encontrada!");
+      return {
+        status: "erro",
+        mensagem: "Aba TOTAL_FABRICA não encontrada na planilha"
+      };
+    }
+
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+
+    if (lastRow < 1 || lastCol < 1) {
+      Logger.log("⚠️ Aba TOTAL_FABRICA está vazia");
+      return {
+        status: "erro",
+        mensagem: "Aba TOTAL_FABRICA está vazia"
+      };
+    }
+
+    // Busca cabeçalho (primeira linha)
+    var cabecalho = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+
+    // Busca dados (a partir da linha 2)
+    var dados = [];
+    if (lastRow > 1) {
+      dados = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    }
+
+    // Formata as datas para exibição
+    var dadosFormatados = dados.map(function(linha) {
+      return linha.map(function(celula, index) {
+        // Se for uma data, formata
+        if (celula instanceof Date) {
+          return Utilities.formatDate(celula, Session.getScriptTimeZone(), "dd/MM/yyyy");
+        }
+        return celula;
+      });
+    });
+
+    Logger.log("✅ Encontrados " + dadosFormatados.length + " registros de demanda por marca");
+
+    return {
+      status: "sucesso",
+      cabecalho: cabecalho,
+      dados: dadosFormatados,
+      totalRegistros: dadosFormatados.length,
+      dataAtualizacao: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss")
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao buscar demanda por marca: " + erro.toString());
+    return {
+      status: "erro",
+      mensagem: "Erro ao buscar dados: " + erro.message
+    };
+  }
+}
