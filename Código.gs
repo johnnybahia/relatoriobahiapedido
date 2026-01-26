@@ -2553,3 +2553,188 @@ function enviarRelatorioEmail() {
     Logger.log("❌ Erro ao enviar relatório: " + erro.toString());
   }
 }
+
+/**
+ * Função de DIAGNÓSTICO - Verifica configuração do sistema de email
+ * Execute esta função para ver o que está faltando
+ */
+function diagnosticarSistemaEmail() {
+  Logger.log("🔍 === DIAGNÓSTICO DO SISTEMA DE EMAIL ===");
+
+  var problemas = [];
+  var ok = [];
+
+  // 1. Verifica aba "email"
+  var sheetEmail = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("email");
+  if (!sheetEmail) {
+    problemas.push("❌ Aba 'email' não encontrada! Crie uma aba chamada 'email' com emails na coluna A");
+  } else {
+    var lastRowEmail = sheetEmail.getLastRow();
+    if (lastRowEmail < 2) {
+      problemas.push("❌ Aba 'email' está vazia! Adicione emails na coluna A");
+    } else {
+      var emails = buscarEmailsDestinatarios();
+      ok.push("✅ Aba 'email' encontrada com " + emails.length + " emails: " + emails.join(", "));
+    }
+  }
+
+  // 2. Verifica aba "RelatoriosDiarios"
+  var sheetRelatorios = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+  if (!sheetRelatorios) {
+    problemas.push("⚠️ Aba 'RelatoriosDiarios' não existe ainda (será criada automaticamente)");
+  } else {
+    var lastRowRel = sheetRelatorios.getLastRow();
+    if (lastRowRel < 2) {
+      problemas.push("⚠️ Aba 'RelatoriosDiarios' está vazia. Execute: salvarDadosDiarios() para popular");
+    } else {
+      ok.push("✅ Aba 'RelatoriosDiarios' tem " + (lastRowRel - 1) + " registros");
+    }
+  }
+
+  // 3. Verifica dados de ontem
+  var dadosOntem = buscarDadosDiaAnterior();
+  var ontem = new Date();
+  ontem.setDate(ontem.getDate() - 1);
+  var dataOntem = Utilities.formatDate(ontem, Session.getScriptTimeZone(), "dd/MM/yyyy");
+
+  if (!dadosOntem.pedidos || dadosOntem.pedidos.length === 0) {
+    problemas.push("⚠️ Nenhum 'Pedido a Faturar' encontrado para " + dataOntem);
+  } else {
+    ok.push("✅ " + dadosOntem.pedidos.length + " pedidos de " + dataOntem);
+  }
+
+  if (!dadosOntem.entradas || dadosOntem.entradas.length === 0) {
+    problemas.push("⚠️ Nenhuma 'Entrada do Dia' encontrada para " + dataOntem);
+  } else {
+    ok.push("✅ " + dadosOntem.entradas.length + " entradas de " + dataOntem);
+  }
+
+  if (!dadosOntem.faturamento || dadosOntem.faturamento.length === 0) {
+    problemas.push("⚠️ Nenhum 'Faturamento' encontrado para " + dataOntem);
+  } else {
+    ok.push("✅ " + dadosOntem.faturamento.length + " faturamentos de " + dataOntem);
+  }
+
+  // 4. Verifica trigger
+  var triggers = ScriptApp.getProjectTriggers();
+  var temTriggerEmail = false;
+  triggers.forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === "enviarRelatorioEmail") {
+      temTriggerEmail = true;
+      ok.push("✅ Trigger configurado: " + trigger.getHandlerFunction());
+    }
+  });
+
+  if (!temTriggerEmail) {
+    problemas.push("❌ TRIGGER NÃO CONFIGURADO! Configure um trigger diário para 'enviarRelatorioEmail' às 8h");
+  }
+
+  // Exibe resultados
+  Logger.log("\n📊 === RESULTADO DO DIAGNÓSTICO ===\n");
+
+  if (ok.length > 0) {
+    Logger.log("✅ ITENS OK:");
+    ok.forEach(function(item) { Logger.log("   " + item); });
+  }
+
+  if (problemas.length > 0) {
+    Logger.log("\n❌ PROBLEMAS ENCONTRADOS:");
+    problemas.forEach(function(item) { Logger.log("   " + item); });
+  }
+
+  if (problemas.length === 0) {
+    Logger.log("\n🎉 TUDO OK! Sistema pronto para enviar emails!");
+  } else {
+    Logger.log("\n⚠️ Corrija os problemas acima para o sistema funcionar corretamente");
+  }
+
+  Logger.log("\n💡 PRÓXIMOS PASSOS:");
+  Logger.log("   1. Corrija os problemas encontrados");
+  Logger.log("   2. Execute: testarEnvioEmailManual() para enviar um email de teste");
+  Logger.log("   3. Configure o trigger para envio automático diário");
+}
+
+/**
+ * Função de TESTE - Envia email manualmente AGORA (não espera trigger)
+ * Use para testar se o email está funcionando
+ */
+function testarEnvioEmailManual() {
+  try {
+    Logger.log("🧪 === TESTE DE ENVIO DE EMAIL ===");
+
+    // Busca emails
+    var emails = buscarEmailsDestinatarios();
+    if (emails.length === 0) {
+      Logger.log("❌ Nenhum email encontrado na aba 'email'");
+      return;
+    }
+
+    Logger.log("📧 Emails encontrados: " + emails.join(", "));
+
+    // Busca dados de ontem
+    var dadosOntem = buscarDadosDiaAnterior();
+
+    var totalItens = (dadosOntem.pedidos ? dadosOntem.pedidos.length : 0) +
+                     (dadosOntem.entradas ? dadosOntem.entradas.length : 0) +
+                     (dadosOntem.faturamento ? dadosOntem.faturamento.length : 0);
+
+    if (totalItens === 0) {
+      Logger.log("⚠️ ATENÇÃO: Nenhum dado de ontem encontrado!");
+      Logger.log("💡 Execute primeiro: salvarDadosDiarios() para popular a aba RelatoriosDiarios");
+      return;
+    }
+
+    Logger.log("📊 Dados de ontem: " + dadosOntem.pedidos.length + " pedidos, " +
+               dadosOntem.entradas.length + " entradas, " +
+               dadosOntem.faturamento.length + " faturamentos");
+
+    // Calcula totais
+    var totalSemana = calcularTotalSemana();
+    var totalMes = calcularTotalMes();
+
+    Logger.log("💰 Total semana: R$ " + totalSemana.toFixed(2));
+    Logger.log("💰 Total mês: R$ " + totalMes.toFixed(2));
+
+    // Formata email
+    var htmlBody = formatarEmailRelatorio(dadosOntem, totalSemana, totalMes);
+    var assunto = "Pedidos e Faturamento atualizado BAHIA - TESTE";
+
+    // Envia
+    emails.forEach(function(email) {
+      MailApp.sendEmail({
+        to: email,
+        subject: assunto,
+        htmlBody: htmlBody
+      });
+      Logger.log("✅ Email de TESTE enviado para: " + email);
+    });
+
+    Logger.log("🎉 Email de teste enviado com sucesso!");
+    Logger.log("📬 Verifique sua caixa de entrada (pode demorar alguns minutos)");
+
+  } catch (erro) {
+    Logger.log("❌ Erro no teste: " + erro.toString());
+  }
+}
+
+/**
+ * Função AUXILIAR - Salva dados de hoje na aba RelatoriosDiarios
+ * Execute se a aba estiver vazia
+ */
+function salvarDadosHojeManualmente() {
+  try {
+    Logger.log("💾 Salvando dados de hoje na aba RelatoriosDiarios...");
+
+    var sucesso = salvarDadosDiarios();
+
+    if (sucesso) {
+      Logger.log("✅ Dados salvos com sucesso!");
+      Logger.log("💡 Agora você pode executar: diagnosticarSistemaEmail()");
+    } else {
+      Logger.log("❌ Erro ao salvar dados");
+    }
+
+  } catch (erro) {
+    Logger.log("❌ Erro: " + erro.toString());
+  }
+}
