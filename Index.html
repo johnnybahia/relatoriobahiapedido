@@ -724,6 +724,204 @@
       color: #ccc;
     }
 
+    /* MODAL DE DEMANDA POR MARCA */
+    .modal-demanda {
+      display: none;
+      position: fixed;
+      z-index: 1500;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.3s;
+    }
+
+    .modal-content-demanda {
+      background-color: white;
+      margin: 3% auto;
+      padding: 0;
+      border-radius: 8px;
+      width: 95%;
+      max-width: 1200px;
+      max-height: 90vh;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      animation: slideDown 0.3s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header-demanda {
+      background: linear-gradient(135deg, #1976d2, #0d47a1);
+      color: white;
+      padding: 20px;
+      border-radius: 8px 8px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header-demanda h2 {
+      margin: 0;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .modal-header-demanda .data-atualizacao {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-left: 15px;
+      background: rgba(255,255,255,0.2);
+      padding: 4px 10px;
+      border-radius: 12px;
+    }
+
+    .close-demanda {
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.2s;
+      line-height: 1;
+    }
+
+    .close-demanda:hover {
+      transform: scale(1.1);
+    }
+
+    .modal-body-demanda {
+      padding: 20px;
+      overflow-y: auto;
+      overflow-x: auto;
+      flex: 1;
+    }
+
+    .demanda-filtros {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .demanda-filtros input {
+      padding: 10px 15px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .demanda-filtros input:focus {
+      outline: none;
+      border-color: #1976d2;
+      box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+    }
+
+    .demanda-tabela {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    .demanda-tabela th {
+      background-color: #f5f5f5;
+      padding: 12px 10px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 2px solid #1976d2;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #333;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .demanda-tabela td {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      color: #444;
+    }
+
+    .demanda-tabela tr:hover {
+      background-color: #e3f2fd;
+    }
+
+    .demanda-tabela tr:nth-child(even) {
+      background-color: #fafafa;
+    }
+
+    .demanda-tabela tr:nth-child(even):hover {
+      background-color: #e3f2fd;
+    }
+
+    .demanda-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 10px;
+    }
+
+    .demanda-info span {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .demanda-loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .demanda-loading .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #1976d2;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .demanda-empty {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .btn-demanda {
+      background: linear-gradient(135deg, #1976d2, #0d47a1);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-demanda:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+    }
+
     /* MODAL DE EDIÇÃO */
     .modal-editar {
       display: none;
@@ -936,6 +1134,7 @@
     <div id="dashboard" style="display:none;">
 
       <button class="btn-print" onclick="imprimirRelatorio()">🖨️ Imprimir Relatório</button>
+      <button class="btn-demanda" onclick="abrirDemandaPorMarca()">📦 Demanda por Marca</button>
 
       <!-- Informações do Relatório (visível apenas na impressão) -->
       <div class="print-only print-info" id="printInfo">
@@ -1164,6 +1363,34 @@
       </div>
 
       <button class="btn-salvar-edicao" onclick="salvarEdicao()">💾 Salvar Alterações</button>
+    </div>
+  </div>
+
+  <!-- MODAL: DEMANDA POR MARCA -->
+  <div id="modalDemanda" class="modal-demanda">
+    <div class="modal-content-demanda">
+      <div class="modal-header-demanda">
+        <h2>
+          📦 Demanda por Marca / Cliente
+          <span class="data-atualizacao" id="demandaDataAtualizacao">-</span>
+        </h2>
+        <span class="close-demanda" onclick="fecharDemandaPorMarca()">&times;</span>
+      </div>
+      <div class="modal-body-demanda">
+        <div class="demanda-filtros">
+          <input type="text" id="filtroDemanda" placeholder="🔍 Filtrar por cliente, marca..." onkeyup="filtrarTabelaDemanda()">
+        </div>
+        <div class="demanda-info">
+          <span id="demandaTotalRegistros">Total: 0 registros</span>
+          <span id="demandaFiltrados"></span>
+        </div>
+        <div id="conteudoDemanda">
+          <div class="demanda-loading">
+            <div class="spinner"></div>
+            <p>Carregando dados de demanda...</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2359,6 +2586,142 @@
 
     // ========================================
     // FIM DAS FUNÇÕES DE HISTÓRICO
+    // ========================================
+
+    // ========================================
+    // FUNÇÕES DE DEMANDA POR MARCA
+    // ========================================
+
+    var dadosDemandaOriginal = []; // Armazena dados originais para filtro
+
+    // Abre modal de demanda por marca
+    function abrirDemandaPorMarca() {
+      document.getElementById('modalDemanda').style.display = 'block';
+      document.getElementById('filtroDemanda').value = '';
+      document.getElementById('demandaFiltrados').textContent = '';
+      carregarDemandaPorMarca();
+    }
+
+    // Fecha modal de demanda por marca
+    function fecharDemandaPorMarca() {
+      document.getElementById('modalDemanda').style.display = 'none';
+    }
+
+    // Carrega dados da aba TOTAL_FABRICA
+    function carregarDemandaPorMarca() {
+      var container = document.getElementById('conteudoDemanda');
+      container.innerHTML = '<div class="demanda-loading"><div class="spinner"></div><p>Carregando dados de demanda...</p></div>';
+
+      addDebugLog("📦 Carregando dados de demanda por marca...");
+
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          if (resultado.status === "erro") {
+            container.innerHTML = '<div class="demanda-empty">❌ ' + resultado.mensagem + '</div>';
+            addDebugLog("❌ Erro ao carregar demanda: " + resultado.mensagem, "error");
+            return;
+          }
+
+          // Atualiza data de atualização
+          document.getElementById('demandaDataAtualizacao').textContent = 'Atualizado em: ' + resultado.dataAtualizacao;
+          document.getElementById('demandaTotalRegistros').textContent = 'Total: ' + resultado.totalRegistros + ' registros';
+
+          // Guarda dados para filtro
+          dadosDemandaOriginal = resultado.dados;
+
+          // Renderiza tabela
+          renderizarTabelaDemanda(resultado.cabecalho, resultado.dados);
+          addDebugLog("✅ Demanda por marca carregada: " + resultado.totalRegistros + " registros", "success");
+        })
+        .withFailureHandler(function(error) {
+          container.innerHTML = '<div class="demanda-empty">❌ Erro ao carregar dados: ' + error.message + '</div>';
+          addDebugLog("❌ Erro ao carregar demanda: " + error.message, "error");
+        })
+        .getDemandaPorMarca();
+    }
+
+    // Renderiza tabela de demanda
+    function renderizarTabelaDemanda(cabecalho, dados) {
+      var container = document.getElementById('conteudoDemanda');
+
+      if (!dados || dados.length === 0) {
+        container.innerHTML = '<div class="demanda-empty">📭 Nenhum dado de demanda encontrado na aba TOTAL_FABRICA</div>';
+        return;
+      }
+
+      var html = '<table class="demanda-tabela">';
+
+      // Cabeçalho
+      html += '<thead><tr>';
+      cabecalho.forEach(function(col) {
+        html += '<th>' + (col || '-') + '</th>';
+      });
+      html += '</tr></thead>';
+
+      // Dados
+      html += '<tbody>';
+      dados.forEach(function(linha) {
+        html += '<tr>';
+        linha.forEach(function(celula, idx) {
+          var valor = celula;
+          // Formata valores numéricos como moeda se parecer ser um valor monetário
+          if (typeof celula === 'number' && cabecalho[idx] &&
+              (cabecalho[idx].toLowerCase().includes('valor') ||
+               cabecalho[idx].toLowerCase().includes('total') ||
+               cabecalho[idx].toLowerCase().includes('r$'))) {
+            valor = 'R$ ' + celula.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+          } else if (celula === '' || celula === null || celula === undefined) {
+            valor = '-';
+          }
+          html += '<td>' + valor + '</td>';
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+
+      container.innerHTML = html;
+    }
+
+    // Filtra tabela de demanda
+    function filtrarTabelaDemanda() {
+      var filtro = document.getElementById('filtroDemanda').value.toLowerCase().trim();
+
+      if (!filtro) {
+        renderizarTabelaDemanda(
+          document.querySelector('.demanda-tabela thead tr') ?
+            Array.from(document.querySelectorAll('.demanda-tabela thead th')).map(th => th.textContent) :
+            [],
+          dadosDemandaOriginal
+        );
+        document.getElementById('demandaFiltrados').textContent = '';
+        document.getElementById('demandaTotalRegistros').textContent = 'Total: ' + dadosDemandaOriginal.length + ' registros';
+        return;
+      }
+
+      var dadosFiltrados = dadosDemandaOriginal.filter(function(linha) {
+        return linha.some(function(celula) {
+          return String(celula).toLowerCase().includes(filtro);
+        });
+      });
+
+      // Pega o cabeçalho atual
+      var cabecalhoAtual = Array.from(document.querySelectorAll('.demanda-tabela thead th')).map(th => th.textContent);
+
+      renderizarTabelaDemanda(cabecalhoAtual, dadosFiltrados);
+      document.getElementById('demandaFiltrados').textContent = '(mostrando ' + dadosFiltrados.length + ' filtrados)';
+      document.getElementById('demandaTotalRegistros').textContent = 'Total: ' + dadosDemandaOriginal.length + ' registros';
+    }
+
+    // Evento para fechar modal clicando fora
+    window.addEventListener('click', function(event) {
+      var modalDemanda = document.getElementById('modalDemanda');
+      if (event.target === modalDemanda) {
+        fecharDemandaPorMarca();
+      }
+    });
+
+    // ========================================
+    // FIM DAS FUNÇÕES DE DEMANDA POR MARCA
     // ========================================
 
     // Função para Imprimir Relatório
