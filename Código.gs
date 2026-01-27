@@ -2255,7 +2255,22 @@ function buscarDadosDiaAnterior() {
     var faturamento = [];
 
     dados.forEach(function(row) {
-      if (row[0] === dataOntem) {
+      // Converte a data da planilha para string no formato dd/MM/yyyy
+      var dataRow = row[0];
+      var dataRowFormatada;
+
+      if (dataRow instanceof Date) {
+        // Se for objeto Date, formata para string
+        dataRowFormatada = Utilities.formatDate(dataRow, Session.getScriptTimeZone(), "dd/MM/yyyy");
+      } else if (typeof dataRow === 'string') {
+        // Se já for string, usa diretamente
+        dataRowFormatada = dataRow.trim();
+      } else {
+        // Outro tipo, converte para string
+        dataRowFormatada = String(dataRow);
+      }
+
+      if (dataRowFormatada === dataOntem) {
         var item = {
           cliente: row[1],
           marca: row[2],
