@@ -2144,6 +2144,70 @@ function criarOuVerificarAbaRelatoriosDiarios() {
 }
 
 /**
+ * Remove dados duplicados da aba RelatoriosDiarios
+ * Mantém apenas um registro único por data/cliente/marca/tipo
+ */
+function limparDadosDuplicados() {
+  try {
+    Logger.log("🧹 Iniciando limpeza de dados duplicados...");
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+
+    if (!sheet) {
+      Logger.log("⚠️ Aba RelatoriosDiarios não encontrada");
+      return;
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log("ℹ️ Aba vazia, nada para limpar");
+      return;
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    var vistos = {};
+    var linhasParaRemover = [];
+
+    // Identifica linhas duplicadas (de baixo para cima para não afetar índices)
+    for (var i = dados.length - 1; i >= 0; i--) {
+      var row = dados[i];
+      var dataRow = row[0];
+
+      // Converte data para string se necessário
+      if (dataRow instanceof Date) {
+        dataRow = Utilities.formatDate(dataRow, Session.getScriptTimeZone(), "dd/MM/yyyy");
+      }
+
+      // Cria chave única: data|cliente|marca|tipo
+      var chave = dataRow + "|" + row[1] + "|" + row[2] + "|" + row[4];
+
+      if (vistos[chave]) {
+        // Duplicado encontrado - marcar para remoção (linha + 2 porque dados começa na linha 2)
+        linhasParaRemover.push(i + 2);
+      } else {
+        vistos[chave] = true;
+      }
+    }
+
+    // Remove linhas duplicadas (de cima para baixo para manter índices corretos)
+    linhasParaRemover.sort(function(a, b) { return b - a; });
+
+    linhasParaRemover.forEach(function(linha) {
+      sheet.deleteRow(linha);
+    });
+
+    Logger.log("✅ Limpeza concluída! " + linhasParaRemover.length + " registros duplicados removidos.");
+    Logger.log("📊 Registros únicos restantes: " + (lastRow - 1 - linhasParaRemover.length));
+
+    return linhasParaRemover.length;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao limpar duplicados: " + erro.toString());
+    return -1;
+  }
+}
+
+/**
  * Salva dados diários na aba RelatoriosDiarios
  * Chamada pelo trigger diário às 8h
  */
@@ -2154,6 +2218,25 @@ function salvarDadosDiarios() {
     var sheet = criarOuVerificarAbaRelatoriosDiarios();
     var hoje = new Date();
     var dataFormatada = Utilities.formatDate(hoje, Session.getScriptTimeZone(), "dd/MM/yyyy");
+
+    // Verifica se já existem dados para hoje (evita duplicação)
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      var dadosExistentes = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      var jaTemDadosHoje = dadosExistentes.some(function(row) {
+        var dataRow = row[0];
+        if (dataRow instanceof Date) {
+          return Utilities.formatDate(dataRow, Session.getScriptTimeZone(), "dd/MM/yyyy") === dataFormatada;
+        }
+        return String(dataRow).trim() === dataFormatada;
+      });
+
+      if (jaTemDadosHoje) {
+        Logger.log("⚠️ Já existem dados salvos para " + dataFormatada + ". Pulando para evitar duplicação.");
+        Logger.log("💡 Se deseja resalvar, execute primeiro: limparDadosDuplicados()");
+        return false;
+      }
+    }
 
     // 1. Pedidos a Faturar
     var pedidos = getPedidosAFaturar();
