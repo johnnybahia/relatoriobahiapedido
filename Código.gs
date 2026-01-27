@@ -2311,19 +2311,22 @@ function buscarEmailsDestinatarios() {
 }
 
 /**
- * Busca dados ATUAIS diretamente das fontes corretas
- * - Pedidos: getPedidosAFaturar()
- * - Entradas: getEntradasDoDia()
- * - Faturamento: getUltimoFaturamento() (da aba HistoricoFaturamento)
+ * Busca dados para o email:
+ * - Pedidos: situação ATUAL (getPedidosAFaturar)
+ * - Entradas: do dia ANTERIOR (da aba RelatoriosDiarios)
+ * - Faturamento: do dia ANTERIOR (da aba HistoricoFaturamento)
  */
 function buscarDadosAtuais() {
   try {
-    Logger.log("📊 Buscando dados atuais das fontes originais...");
+    Logger.log("📊 Buscando dados para email...");
 
-    var hoje = new Date();
-    var dataFormatada = Utilities.formatDate(hoje, Session.getScriptTimeZone(), "dd/MM/yyyy");
+    var ontem = new Date();
+    ontem.setDate(ontem.getDate() - 1);
+    var dataOntem = Utilities.formatDate(ontem, Session.getScriptTimeZone(), "dd/MM/yyyy");
 
-    // 1. Pedidos a Faturar
+    Logger.log("📅 Buscando dados de ontem: " + dataOntem);
+
+    // 1. Pedidos a Faturar (situação ATUAL)
     var pedidosResult = getPedidosAFaturar();
     var pedidos = [];
     if (pedidosResult.sucesso && pedidosResult.dados) {
@@ -2335,46 +2338,124 @@ function buscarDadosAtuais() {
         };
       });
     }
-    Logger.log("✅ Pedidos: " + pedidos.length + " encontrados");
+    Logger.log("✅ Pedidos (atual): " + pedidos.length + " encontrados");
 
-    // 2. Entradas do Dia
-    var entradasResult = getEntradasDoDia();
-    var entradas = [];
-    if (entradasResult.sucesso && entradasResult.dados) {
-      entradas = entradasResult.dados.map(function(item) {
-        return {
-          cliente: item.cliente,
-          marca: item.marca,
-          valor: item.valor
-        };
-      });
-    }
-    Logger.log("✅ Entradas: " + entradas.length + " encontradas");
+    // 2. Entradas do Dia ANTERIOR (da aba RelatoriosDiarios)
+    var entradas = buscarEntradasDeOntem(dataOntem);
+    Logger.log("✅ Entradas (ontem): " + entradas.length + " encontradas");
 
-    // 3. Faturamento (da aba HistoricoFaturamento)
-    var faturamentoResult = getUltimoFaturamento();
-    var faturamento = [];
-    if (faturamentoResult.sucesso && faturamentoResult.dados) {
-      faturamento = faturamentoResult.dados.map(function(item) {
-        return {
-          cliente: item.cliente,
-          marca: item.marca,
-          valor: item.valor
-        };
-      });
-    }
-    Logger.log("✅ Faturamento: " + faturamento.length + " encontrados");
+    // 3. Faturamento do Dia ANTERIOR (da aba HistoricoFaturamento)
+    var faturamento = buscarFaturamentoDeOntem(dataOntem);
+    Logger.log("✅ Faturamento (ontem): " + faturamento.length + " encontrados");
 
     return {
       pedidos: pedidos,
       entradas: entradas,
       faturamento: faturamento,
-      data: dataFormatada
+      data: dataOntem
     };
 
   } catch (erro) {
-    Logger.log("❌ Erro ao buscar dados atuais: " + erro.toString());
+    Logger.log("❌ Erro ao buscar dados: " + erro.toString());
     return {pedidos: [], entradas: [], faturamento: [], data: ""};
+  }
+}
+
+/**
+ * Busca entradas de uma data específica (da aba RelatoriosDiarios)
+ */
+function buscarEntradasDeOntem(dataOntem) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+
+    if (!sheet) {
+      Logger.log("⚠️ Aba RelatoriosDiarios não encontrada");
+      return [];
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return [];
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    var entradas = [];
+
+    dados.forEach(function(row) {
+      var dataRow = row[0];
+      var dataRowFormatada;
+
+      if (dataRow instanceof Date) {
+        dataRowFormatada = Utilities.formatDate(dataRow, Session.getScriptTimeZone(), "dd/MM/yyyy");
+      } else if (typeof dataRow === 'string') {
+        dataRowFormatada = dataRow.trim();
+      } else {
+        dataRowFormatada = String(dataRow);
+      }
+
+      if (dataRowFormatada === dataOntem && row[4] === "Entrada do Dia") {
+        entradas.push({
+          cliente: row[1],
+          marca: row[2],
+          valor: row[3]
+        });
+      }
+    });
+
+    return entradas;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao buscar entradas de ontem: " + erro.toString());
+    return [];
+  }
+}
+
+/**
+ * Busca faturamento de uma data específica (da aba HistoricoFaturamento)
+ */
+function buscarFaturamentoDeOntem(dataOntem) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+
+    if (!sheet) {
+      Logger.log("⚠️ Aba HistoricoFaturamento não encontrada");
+      return [];
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return [];
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    var faturamento = [];
+
+    dados.forEach(function(row) {
+      var dataRow = row[0];
+      var dataRowFormatada;
+
+      if (dataRow instanceof Date) {
+        dataRowFormatada = Utilities.formatDate(dataRow, Session.getScriptTimeZone(), "dd/MM/yyyy");
+      } else if (typeof dataRow === 'string') {
+        dataRowFormatada = dataRow.trim();
+      } else {
+        dataRowFormatada = String(dataRow);
+      }
+
+      if (dataRowFormatada === dataOntem) {
+        faturamento.push({
+          cliente: row[1],
+          marca: row[2],
+          valor: typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0
+        });
+      }
+    });
+
+    return faturamento;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao buscar faturamento de ontem: " + erro.toString());
+    return [];
   }
 }
 
