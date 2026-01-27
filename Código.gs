@@ -2311,6 +2311,172 @@ function buscarEmailsDestinatarios() {
 }
 
 /**
+ * Busca dados ATUAIS diretamente das fontes corretas
+ * - Pedidos: getPedidosAFaturar()
+ * - Entradas: getEntradasDoDia()
+ * - Faturamento: getUltimoFaturamento() (da aba HistoricoFaturamento)
+ */
+function buscarDadosAtuais() {
+  try {
+    Logger.log("📊 Buscando dados atuais das fontes originais...");
+
+    var hoje = new Date();
+    var dataFormatada = Utilities.formatDate(hoje, Session.getScriptTimeZone(), "dd/MM/yyyy");
+
+    // 1. Pedidos a Faturar
+    var pedidosResult = getPedidosAFaturar();
+    var pedidos = [];
+    if (pedidosResult.sucesso && pedidosResult.dados) {
+      pedidos = pedidosResult.dados.map(function(item) {
+        return {
+          cliente: item.cliente,
+          marca: item.marca,
+          valor: item.valor
+        };
+      });
+    }
+    Logger.log("✅ Pedidos: " + pedidos.length + " encontrados");
+
+    // 2. Entradas do Dia
+    var entradasResult = getEntradasDoDia();
+    var entradas = [];
+    if (entradasResult.sucesso && entradasResult.dados) {
+      entradas = entradasResult.dados.map(function(item) {
+        return {
+          cliente: item.cliente,
+          marca: item.marca,
+          valor: item.valor
+        };
+      });
+    }
+    Logger.log("✅ Entradas: " + entradas.length + " encontradas");
+
+    // 3. Faturamento (da aba HistoricoFaturamento)
+    var faturamentoResult = getUltimoFaturamento();
+    var faturamento = [];
+    if (faturamentoResult.sucesso && faturamentoResult.dados) {
+      faturamento = faturamentoResult.dados.map(function(item) {
+        return {
+          cliente: item.cliente,
+          marca: item.marca,
+          valor: item.valor
+        };
+      });
+    }
+    Logger.log("✅ Faturamento: " + faturamento.length + " encontrados");
+
+    return {
+      pedidos: pedidos,
+      entradas: entradas,
+      faturamento: faturamento,
+      data: dataFormatada
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao buscar dados atuais: " + erro.toString());
+    return {pedidos: [], entradas: [], faturamento: [], data: ""};
+  }
+}
+
+/**
+ * Calcula total de faturamento da semana (da aba HistoricoFaturamento)
+ */
+function calcularTotalSemanaHistorico() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+
+    if (!sheet) {
+      return 0;
+    }
+
+    var hoje = new Date();
+    var diaDaSemana = hoje.getDay(); // 0=domingo, 1=segunda, etc
+
+    // Calcula segunda-feira da semana atual
+    var segunda = new Date(hoje);
+    var diasAteSegunda = (diaDaSemana === 0) ? -6 : -(diaDaSemana - 1);
+    segunda.setDate(hoje.getDate() + diasAteSegunda);
+    segunda.setHours(0, 0, 0, 0);
+
+    // Calcula domingo da semana atual
+    var domingo = new Date(segunda);
+    domingo.setDate(segunda.getDate() + 6);
+    domingo.setHours(23, 59, 59, 999);
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return 0;
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    var total = 0;
+
+    dados.forEach(function(row) {
+      var dataRow = row[0];
+      if (typeof dataRow === 'string') {
+        var partes = dataRow.split('/');
+        dataRow = new Date(partes[2], partes[1] - 1, partes[0]);
+      }
+
+      if (dataRow >= segunda && dataRow <= domingo) {
+        total += (typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0);
+      }
+    });
+
+    Logger.log("✅ Total da semana (HistoricoFaturamento): R$ " + total.toFixed(2));
+    return total;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao calcular total da semana: " + erro.toString());
+    return 0;
+  }
+}
+
+/**
+ * Calcula total de faturamento do mês (da aba HistoricoFaturamento)
+ */
+function calcularTotalMesHistorico() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoFaturamento");
+
+    if (!sheet) {
+      return 0;
+    }
+
+    var hoje = new Date();
+    var mesAtual = hoje.getMonth();
+    var anoAtual = hoje.getFullYear();
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return 0;
+    }
+
+    var dados = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    var total = 0;
+
+    dados.forEach(function(row) {
+      var dataRow = row[0];
+      if (typeof dataRow === 'string') {
+        var partes = dataRow.split('/');
+        dataRow = new Date(partes[2], partes[1] - 1, partes[0]);
+      }
+
+      if (dataRow.getMonth() === mesAtual && dataRow.getFullYear() === anoAtual) {
+        total += (typeof row[3] === 'number' ? row[3] : parseFloat(row[3]) || 0);
+      }
+    });
+
+    Logger.log("✅ Total do mês (HistoricoFaturamento): R$ " + total.toFixed(2));
+    return total;
+
+  } catch (erro) {
+    Logger.log("❌ Erro ao calcular total do mês: " + erro.toString());
+    return 0;
+  }
+}
+
+/**
  * Busca dados do dia anterior na aba RelatoriosDiarios
  */
 function buscarDadosDiaAnterior() {
@@ -2607,23 +2773,23 @@ function enviarRelatorioEmail() {
   try {
     Logger.log("📧 Iniciando envio de relatório por email...");
 
-    // 1. Salva dados de hoje
+    // 1. Salva dados de hoje na aba RelatoriosDiarios (para histórico)
     salvarDadosDiarios();
 
-    // 2. Busca dados de ontem
-    var dadosOntem = buscarDadosDiaAnterior();
+    // 2. Busca dados ATUAIS das fontes corretas
+    var dadosAtuais = buscarDadosAtuais();
 
-    if (dadosOntem.pedidos.length === 0 && dadosOntem.entradas.length === 0 && dadosOntem.faturamento.length === 0) {
-      Logger.log("⚠️ Nenhum dado de ontem encontrado. Email não será enviado.");
+    if (dadosAtuais.pedidos.length === 0 && dadosAtuais.entradas.length === 0 && dadosAtuais.faturamento.length === 0) {
+      Logger.log("⚠️ Nenhum dado encontrado. Email não será enviado.");
       return;
     }
 
-    // 3. Calcula totais
-    var totalSemana = calcularTotalSemana();
-    var totalMes = calcularTotalMes();
+    // 3. Calcula totais da aba HistoricoFaturamento
+    var totalSemana = calcularTotalSemanaHistorico();
+    var totalMes = calcularTotalMesHistorico();
 
     // 4. Formata email
-    var htmlBody = formatarEmailRelatorio(dadosOntem, totalSemana, totalMes);
+    var htmlBody = formatarEmailRelatorio(dadosAtuais, totalSemana, totalMes);
 
     // 5. Busca emails destinatários
     var emails = buscarEmailsDestinatarios();
@@ -2769,32 +2935,32 @@ function testarEnvioEmailManual() {
 
     Logger.log("📧 Emails encontrados: " + emails.join(", "));
 
-    // Busca dados de ontem
-    var dadosOntem = buscarDadosDiaAnterior();
+    // Busca dados ATUAIS das fontes corretas (não mais da aba RelatoriosDiarios)
+    var dadosAtuais = buscarDadosAtuais();
 
-    var totalItens = (dadosOntem.pedidos ? dadosOntem.pedidos.length : 0) +
-                     (dadosOntem.entradas ? dadosOntem.entradas.length : 0) +
-                     (dadosOntem.faturamento ? dadosOntem.faturamento.length : 0);
+    var totalItens = (dadosAtuais.pedidos ? dadosAtuais.pedidos.length : 0) +
+                     (dadosAtuais.entradas ? dadosAtuais.entradas.length : 0) +
+                     (dadosAtuais.faturamento ? dadosAtuais.faturamento.length : 0);
 
     if (totalItens === 0) {
-      Logger.log("⚠️ ATENÇÃO: Nenhum dado de ontem encontrado!");
-      Logger.log("💡 Execute primeiro: salvarDadosDiarios() para popular a aba RelatoriosDiarios");
+      Logger.log("⚠️ ATENÇÃO: Nenhum dado encontrado!");
+      Logger.log("💡 Verifique se existem dados nas abas de origem");
       return;
     }
 
-    Logger.log("📊 Dados de ontem: " + dadosOntem.pedidos.length + " pedidos, " +
-               dadosOntem.entradas.length + " entradas, " +
-               dadosOntem.faturamento.length + " faturamentos");
+    Logger.log("📊 Dados atuais: " + dadosAtuais.pedidos.length + " pedidos, " +
+               dadosAtuais.entradas.length + " entradas, " +
+               dadosAtuais.faturamento.length + " faturamentos");
 
-    // Calcula totais
-    var totalSemana = calcularTotalSemana();
-    var totalMes = calcularTotalMes();
+    // Calcula totais da aba HistoricoFaturamento
+    var totalSemana = calcularTotalSemanaHistorico();
+    var totalMes = calcularTotalMesHistorico();
 
     Logger.log("💰 Total semana: R$ " + totalSemana.toFixed(2));
     Logger.log("💰 Total mês: R$ " + totalMes.toFixed(2));
 
     // Formata email
-    var htmlBody = formatarEmailRelatorio(dadosOntem, totalSemana, totalMes);
+    var htmlBody = formatarEmailRelatorio(dadosAtuais, totalSemana, totalMes);
     var assunto = "Pedidos e Faturamento atualizado BAHIA - TESTE";
 
     // Envia
