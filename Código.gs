@@ -1102,6 +1102,35 @@ function getFaturamentoDia() {
     // Compara com snapshot anterior
     var mapaAnterior = JSON.parse(snapshotAnterior);
 
+    // PROTEÇÃO: Se dados atuais estão vazios mas snapshot anterior tinha dados,
+    // provavelmente houve erro na leitura. NÃO detectar como faturamento total.
+    var totalOCsAtual = Object.keys(mapaAtual).length;
+    var totalOCsAnterior = Object.keys(mapaAnterior).length;
+
+    if (totalOCsAtual === 0 && totalOCsAnterior > 0) {
+      Logger.log("⚠️ PROTEÇÃO: Dados1 retornou vazio mas snapshot tem " + totalOCsAnterior + " OCs.");
+      Logger.log("⚠️ Isso pode ser um erro de leitura. NÃO atualizando snapshot para evitar falsos positivos.");
+      return {
+        sucesso: true,
+        timestamp: timestampAnterior,
+        dados: [],
+        mensagem: "Leitura de dados possivelmente incompleta. Snapshot mantido."
+      };
+    }
+
+    // PROTEÇÃO ADICIONAL: Se mais de 80% das OCs "sumiram" de uma vez,
+    // provavelmente é erro de leitura, não faturamento real.
+    if (totalOCsAnterior > 5 && totalOCsAtual < totalOCsAnterior * 0.2) {
+      Logger.log("⚠️ PROTEÇÃO: " + (totalOCsAnterior - totalOCsAtual) + " de " + totalOCsAnterior + " OCs sumiram (mais de 80%).");
+      Logger.log("⚠️ Faturamento massivo improvável. NÃO atualizando snapshot.");
+      return {
+        sucesso: true,
+        timestamp: timestampAnterior,
+        dados: [],
+        mensagem: "Variação muito grande detectada. Snapshot mantido por segurança."
+      };
+    }
+
     // OTIMIZAÇÃO: Carrega mapa de marcas UMA VEZ
     var mapaOCMarca = criarMapaOCMarca();
 
@@ -1759,6 +1788,119 @@ function resetarAcumuladoFaturamento() {
     sucesso: true,
     mensagem: "Acumulado resetado com sucesso"
   };
+}
+
+/**
+ * FUNÇÃO DE REPARO: Corrige problemas no ControleFaturamento e HistoricoFaturamento
+ * USE QUANDO: Os cálculos ficaram errados ou tudo foi marcado como "Faturado" indevidamente
+ *
+ * O que esta função faz:
+ * 1. Reseta o snapshot de faturamento (evita detecções falsas futuras)
+ * 2. Reseta o acumulado do dia
+ * 3. Recria a aba ControleFaturamento do zero (todos OCs voltam para "Pendente")
+ * 4. Remove registros automáticos incorretos do HistoricoFaturamento de hoje
+ */
+function corrigirFaturamento() {
+  try {
+    Logger.log("🔧 === INICIANDO CORREÇÃO DE FATURAMENTO ===");
+
+    var doc = SpreadsheetApp.getActiveSpreadsheet();
+    var props = PropertiesService.getScriptProperties();
+
+    // === PASSO 1: Resetar snapshot ===
+    Logger.log("📸 Passo 1: Resetando snapshot de faturamento...");
+    props.deleteProperty('SNAPSHOT_DADOS1');
+    props.deleteProperty('SNAPSHOT_TIMESTAMP');
+    Logger.log("✅ Snapshot resetado");
+
+    // === PASSO 2: Resetar acumulado ===
+    Logger.log("🔄 Passo 2: Resetando acumulado de faturamento...");
+    props.deleteProperty('ULTIMO_FATURAMENTO');
+    props.deleteProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
+    props.deleteProperty('FATURAMENTO_DATA');
+    Logger.log("✅ Acumulado resetado");
+
+    // === PASSO 3: Recriar ControleFaturamento do zero ===
+    Logger.log("📋 Passo 3: Recriando aba ControleFaturamento...");
+    var sheetControle = doc.getSheetByName("ControleFaturamento");
+
+    if (sheetControle) {
+      // Deleta a aba existente
+      doc.deleteSheet(sheetControle);
+      Logger.log("🗑️ Aba ControleFaturamento deletada");
+    }
+
+    // Recria do zero (todas OCs com valorFaturado = 0, status = Pendente)
+    criarOuAtualizarAbaControle();
+    Logger.log("✅ ControleFaturamento recriada com valores zerados");
+
+    // === PASSO 4: Limpar HistoricoFaturamento de hoje (registros automáticos) ===
+    Logger.log("📊 Passo 4: Limpando registros automáticos incorretos de hoje...");
+    var sheetHistorico = doc.getSheetByName("HistoricoFaturamento");
+
+    if (sheetHistorico && sheetHistorico.getLastRow() > 1) {
+      var dataAtual = new Date();
+      var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
+                     ("0" + (dataAtual.getMonth() + 1)).slice(-2) + "/" +
+                     dataAtual.getFullYear();
+
+      var lastRow = sheetHistorico.getLastRow();
+      var removidos = 0;
+
+      // Percorre de baixo para cima para evitar problemas com deleteRow
+      for (var i = lastRow; i >= 2; i--) {
+        var row = sheetHistorico.getRange(i, 1, 1, 6).getValues()[0];
+
+        // Normaliza data
+        var dataLinha = row[0];
+        if (dataLinha instanceof Date) {
+          var d = dataLinha;
+          var dia = ("0" + d.getDate()).slice(-2);
+          var mes = ("0" + (d.getMonth() + 1)).slice(-2);
+          var ano = d.getFullYear();
+          dataLinha = dia + "/" + mes + "/" + ano;
+        } else {
+          dataLinha = dataLinha.toString().trim();
+        }
+
+        // Remove apenas registros automáticos de hoje (sem observação)
+        if (dataLinha === diaAtual) {
+          var obs = row[4] ? row[4].toString().trim() : "";
+          if (!obs || obs === "") {
+            sheetHistorico.deleteRow(i);
+            removidos++;
+          }
+        }
+      }
+
+      Logger.log("✅ Removidos " + removidos + " registros automáticos de hoje do histórico");
+    } else {
+      Logger.log("ℹ️ Aba HistoricoFaturamento vazia ou não existe");
+    }
+
+    // === PASSO 5: Criar novo snapshot com dados atuais ===
+    Logger.log("📸 Passo 5: Criando novo snapshot com dados atuais...");
+    var mapaAtual = agruparDados1PorOC();
+    props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
+    props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
+    Logger.log("✅ Novo snapshot criado com " + Object.keys(mapaAtual).length + " OCs");
+
+    Logger.log("🔧 === CORREÇÃO CONCLUÍDA COM SUCESSO ===");
+    Logger.log("ℹ️ O sistema começará a detectar faturamento normalmente a partir de agora");
+    Logger.log("ℹ️ Faturamentos anteriores que estavam corretos no HistoricoFaturamento foram mantidos");
+
+    return {
+      sucesso: true,
+      mensagem: "Correção concluída! ControleFaturamento recriada, snapshot resetado, e registros incorretos de hoje removidos."
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro durante correção: " + erro.toString());
+    return {
+      sucesso: false,
+      mensagem: "Erro: " + erro.toString()
+    };
+  }
 }
 
 /**
