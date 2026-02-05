@@ -332,6 +332,25 @@ function lerDados1() {
     // Lê 6 colunas: A=OC, B=Valor, C=Cliente, D=Data Recebimento, E=UNIDADE, F=QUANTIDADE
     var dados = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
 
+    // PROTEÇÃO: Detecta se a planilha está em estado de carregamento
+    // IMPORTRANGE/QUERY podem mostrar erros temporários durante atualização
+    var errosCarregamento = ["#REF!", "#N/A", "#ERROR!", "Loading...", "#VALUE!", "Carregando..."];
+    var primeirasCelulas = dados.slice(0, Math.min(5, dados.length)); // Verifica primeiras 5 linhas
+
+    for (var i = 0; i < primeirasCelulas.length; i++) {
+      var celula = primeirasCelulas[i][0]; // Coluna A (OC)
+      if (celula) {
+        var valorStr = celula.toString().trim();
+        for (var j = 0; j < errosCarregamento.length; j++) {
+          if (valorStr.indexOf(errosCarregamento[j]) !== -1) {
+            Logger.log("⚠️ Detectado erro de carregamento na linha " + (i+2) + ": '" + valorStr + "'");
+            Logger.log("⚠️ A aba Dados1 provavelmente está atualizando (IMPORTRANGE/QUERY)");
+            return []; // Retorna vazio para acionar o retry
+          }
+        }
+      }
+    }
+
     var resultado = [];
     dados.forEach(function(row) {
       if (row[0] && row[1]) { // Precisa ter pelo menos OC e Valor
@@ -361,7 +380,34 @@ function lerDados1() {
  */
 function agruparDados1PorOC() {
   try {
-    var dados = lerDados1();
+    // PROTEÇÃO: Sistema de retry para quando Dados1 está atualizando
+    // A aba Dados1 pode ficar vazia por alguns segundos durante atualização de IMPORTRANGE/QUERY
+    var MAX_TENTATIVAS = 3;
+    var DELAY_MS = 3000; // 3 segundos entre tentativas
+    var dados = [];
+    var tentativa = 0;
+
+    while (tentativa < MAX_TENTATIVAS) {
+      tentativa++;
+      dados = lerDados1();
+
+      if (dados.length > 0) {
+        // Dados OK, sai do loop
+        if (tentativa > 1) {
+          Logger.log("✅ Dados1 carregado com sucesso na tentativa " + tentativa);
+        }
+        break;
+      }
+
+      // Dados vazios - pode estar atualizando
+      if (tentativa < MAX_TENTATIVAS) {
+        Logger.log("⚠️ Dados1 retornou vazio (tentativa " + tentativa + "/" + MAX_TENTATIVAS + "). Aguardando " + (DELAY_MS/1000) + "s para retry...");
+        Utilities.sleep(DELAY_MS);
+      } else {
+        Logger.log("⚠️ Dados1 continua vazio após " + MAX_TENTATIVAS + " tentativas. Pode estar em atualização.");
+      }
+    }
+
     var mapaAgrupado = {};
     var countInconsistencias = 0;
 
