@@ -2609,23 +2609,26 @@ function buscarDadosAtuais() {
 }
 
 /**
- * Busca entradas de uma data específica (da aba RelatoriosDiarios)
+ * Busca entradas de uma data específica (da aba HistoricoEntradas)
+ * ATUALIZADO: Agora busca do HistoricoEntradas em vez de RelatoriosDiarios
  */
 function buscarEntradasDeOntem(dataOntem) {
   try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HistoricoEntradas");
 
     if (!sheet) {
-      Logger.log("⚠️ Aba RelatoriosDiarios não encontrada");
+      Logger.log("⚠️ Aba HistoricoEntradas não encontrada");
       return [];
     }
 
     var lastRow = sheet.getLastRow();
     if (lastRow < 2) {
+      Logger.log("⚠️ HistoricoEntradas vazio");
       return [];
     }
 
-    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    // HistoricoEntradas: Data, Cliente, Marca, Valor Entrada, Observação, Timestamp
+    var dados = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
     var entradas = [];
 
     dados.forEach(function(row) {
@@ -2640,7 +2643,7 @@ function buscarEntradasDeOntem(dataOntem) {
         dataRowFormatada = String(dataRow);
       }
 
-      if (dataRowFormatada === dataOntem && row[4] === "Entrada do Dia") {
+      if (dataRowFormatada === dataOntem) {
         entradas.push({
           cliente: row[1],
           marca: row[2],
@@ -2649,6 +2652,7 @@ function buscarEntradasDeOntem(dataOntem) {
       }
     });
 
+    Logger.log("✅ Encontradas " + entradas.length + " entradas de " + dataOntem + " no HistoricoEntradas");
     return entradas;
 
   } catch (erro) {
@@ -2805,64 +2809,40 @@ function calcularTotalMesHistorico() {
 }
 
 /**
- * Busca dados do dia anterior na aba RelatoriosDiarios
+ * Busca dados do dia anterior
+ * ATUALIZADO: Entradas agora vêm do HistoricoEntradas, faturamento do HistoricoFaturamento
  */
 function buscarDadosDiaAnterior() {
   try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
-
-    if (!sheet) {
-      Logger.log("⚠️ Aba RelatoriosDiarios não encontrada");
-      return {pedidos: [], entradas: [], faturamento: []};
-    }
-
     var ontem = new Date();
     ontem.setDate(ontem.getDate() - 1);
     var dataOntem = Utilities.formatDate(ontem, Session.getScriptTimeZone(), "dd/MM/yyyy");
-
-    var lastRow = sheet.getLastRow();
-    if (lastRow < 2) {
-      return {pedidos: [], entradas: [], faturamento: []};
-    }
-
-    var dados = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
 
     var pedidos = [];
     var entradas = [];
     var faturamento = [];
 
-    dados.forEach(function(row) {
-      // Converte a data da planilha para string no formato dd/MM/yyyy
-      var dataRow = row[0];
-      var dataRowFormatada;
+    // 1. Busca pedidos da RelatoriosDiarios (mantém compatibilidade)
+    var sheetRelatorios = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RelatoriosDiarios");
+    if (sheetRelatorios && sheetRelatorios.getLastRow() > 1) {
+      var dadosRelatorios = sheetRelatorios.getRange(2, 1, sheetRelatorios.getLastRow() - 1, 5).getValues();
+      dadosRelatorios.forEach(function(row) {
+        var dataRow = row[0];
+        var dataRowFormatada = dataRow instanceof Date
+          ? Utilities.formatDate(dataRow, Session.getScriptTimeZone(), "dd/MM/yyyy")
+          : String(dataRow).trim();
 
-      if (dataRow instanceof Date) {
-        // Se for objeto Date, formata para string
-        dataRowFormatada = Utilities.formatDate(dataRow, Session.getScriptTimeZone(), "dd/MM/yyyy");
-      } else if (typeof dataRow === 'string') {
-        // Se já for string, usa diretamente
-        dataRowFormatada = dataRow.trim();
-      } else {
-        // Outro tipo, converte para string
-        dataRowFormatada = String(dataRow);
-      }
-
-      if (dataRowFormatada === dataOntem) {
-        var item = {
-          cliente: row[1],
-          marca: row[2],
-          valor: row[3]
-        };
-
-        if (row[4] === "Pedido a Faturar") {
-          pedidos.push(item);
-        } else if (row[4] === "Entrada do Dia") {
-          entradas.push(item);
-        } else if (row[4] === "Faturamento") {
-          faturamento.push(item);
+        if (dataRowFormatada === dataOntem && row[4] === "Pedido a Faturar") {
+          pedidos.push({ cliente: row[1], marca: row[2], valor: row[3] });
         }
-      }
-    });
+      });
+    }
+
+    // 2. Busca entradas do HistoricoEntradas
+    entradas = buscarEntradasDeOntem(dataOntem);
+
+    // 3. Busca faturamento do HistoricoFaturamento
+    faturamento = buscarFaturamentoDeOntem(dataOntem);
 
     Logger.log("✅ Dados de ontem (" + dataOntem + "): " + pedidos.length + " pedidos, " + entradas.length + " entradas, " + faturamento.length + " faturamentos");
 
