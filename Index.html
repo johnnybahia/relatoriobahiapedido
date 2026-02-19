@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pedidos por Marca - Marfim Bahia</title>
+  <title>Pedidos por Marca - Marfim Ceará</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
   
   <style>
@@ -1086,7 +1086,7 @@
   <!-- TELA DE LOGIN -->
   <div id="login-container">
     <img src="https://i.ibb.co/FGGjdsM/LOGO-MARFIM.jpg" alt="Logo MARFIM" class="login-logo">
-    <h2>Pedidos por Marca</h2>
+    <h2>Pedidos por Marca Marfim Ceará</h2>
 
     <input type="text" id="usuario" placeholder="Usuário" autocomplete="username">
     <input type="password" id="senha" placeholder="Senha" autocomplete="current-password">
@@ -1103,7 +1103,7 @@
       <img src="https://i.ibb.co/FGGjdsM/LOGO-MARFIM.jpg" alt="Logo Marfim" class="logo-img">
       <div>
         <div class="header-title">PEDIDO POR MARCA</div>
-        <div class="header-subtitle">MARFIM BAHIA - Painel Gerencial</div>
+        <div class="header-subtitle">MARFIM CEARÁ - Painel Gerencial</div>
       </div>
     </div>
     <div class="header-right">
@@ -1167,11 +1167,12 @@
                 <th>Total em Pares</th>
                 <th>Pares/Dia Útil</th>
                 <th>Total em Metros</th>
+                <th>Total Elástico</th>
               </tr>
             </thead>
             <tbody id="tabelaMarcas">
               <tr>
-                <td colspan="5" class="marcas-empty">Carregando dados...</td>
+                <td colspan="6" class="marcas-empty">Carregando dados...</td>
               </tr>
             </tbody>
           </table>
@@ -1270,6 +1271,11 @@
           <div class="kpi-value-small" id="kpiMetros">0</div>
           <div class="kpi-sub-small">Unidades tipo METRO</div>
         </div>
+        <div class="kpi-card-small" style="border-left-color: #e74c3c;">
+          <div class="kpi-title-small">Total Elástico</div>
+          <div class="kpi-value-small" id="kpiElastico">0</div>
+          <div class="kpi-sub-small">Unidades com elástico (DAKOTA)</div>
+        </div>
       </div>
 
       <div class="table-container">
@@ -1285,6 +1291,7 @@
               <th>Qtd</th>
               <th>Unidade</th>
               <th>Valor (R$)</th>
+              <th>Elástico</th>
             </tr>
           </thead>
           <tbody id="tabelaCorpo">
@@ -1718,6 +1725,7 @@
       var totalValor = 0;
       var totalPares = 0;
       var totalMetros = 0;
+      var totalElastico = 0;
       linhasFiltradas = []; // Atualiza variável global para exportação
 
       if (dadosBrutos && dadosBrutos.length > 0) {
@@ -1754,10 +1762,15 @@
           var valorLimpo = limparNumero(row[8]);
           totalValor += valorLimpo;
 
-          // Soma Qtd (Separa Pares vs Metros) - índices 6 e 7
+          // Verifica se é elástico (coluna K, índice 10)
+          var ehElastico = (row[10] || "").toString().toUpperCase() === "SIM";
+
+          // Soma Qtd (Separa Pares vs Metros vs Elástico) - índices 6, 7 e 10
           var und = (row[7] || "").toString().toUpperCase();
 
-          if (und.includes("PAR")) {
+          if (ehElastico) {
+            totalElastico += qtd;
+          } else if (und.includes("PAR")) {
             totalPares += qtd;
           } else if (und.includes("M") || und.includes("METRO")) {
             totalMetros += qtd;
@@ -1765,12 +1778,12 @@
         });
 
         addDebugLog("✅ Filtro aplicado: " + linhasFiltradas.length + " registros encontrados (Total: " + dadosBrutos.length + ", Ignoradas: " + linhasIgnoradas + ")", "success");
-        addDebugLog("💰 Total calculado: R$ " + totalValor.toFixed(2) + " | Pares: " + totalPares + " | Metros: " + totalMetros);
+        addDebugLog("💰 Total calculado: R$ " + totalValor.toFixed(2) + " | Pares: " + totalPares + " | Metros: " + totalMetros + " | Elástico: " + totalElastico);
       } else {
         addDebugLog("⚠️ Nenhum dado bruto disponível para filtrar", "error");
       }
 
-      atualizarKPIs(totalValor, totalPares, totalMetros);
+      atualizarKPIs(totalValor, totalPares, totalMetros, totalElastico);
       atualizarTabela(linhasFiltradas);
     }
 
@@ -1813,10 +1826,11 @@
     }
 
     // Atualiza os cartões coloridos
-    function atualizarKPIs(v, p, m) {
+    function atualizarKPIs(v, p, m, e) {
       document.getElementById("kpiValor").innerText = v.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
       document.getElementById("kpiPares").innerText = p.toLocaleString('pt-BR');
       document.getElementById("kpiMetros").innerText = m.toLocaleString('pt-BR');
+      document.getElementById("kpiElastico").innerText = (e || 0).toLocaleString('pt-BR');
     }
 
     // Desenha a tabela
@@ -1825,7 +1839,7 @@
       tbody.innerHTML = "";
       
       if (!dados || dados.length === 0) {
-        tbody.innerHTML = "<tr><td colspan='9' style='text-align:center; padding:30px; color:#999;'>Nenhum registro encontrado para estes filtros.</td></tr>";
+        tbody.innerHTML = "<tr><td colspan='10' style='text-align:center; padding:30px; color:#999;'>Nenhum registro encontrado para estes filtros.</td></tr>";
         return;
       }
 
@@ -1841,6 +1855,10 @@
         else if(textoUnd.includes("M")) classeBadge = "badge badge-metro";
         else classeBadge = "badge";
 
+        var elasticoHtml = (r[10] || "").toUpperCase() === "SIM"
+          ? '<span style="color:#e74c3c; font-weight:bold;">SIM</span>'
+          : '';
+
         tr.innerHTML = `
           <td>${r[0]}</td>
           <td>${r[1]}</td>
@@ -1851,6 +1869,7 @@
           <td>${r[6]}</td>
           <td><span class="${classeBadge}">${r[7]}</span></td>
           <td style="color:#2c3e50; font-weight:bold;">${r[8]}</td>
+          <td>${elasticoHtml}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -2042,19 +2061,25 @@
           // Ignora linhas com quantidade 0
           if (qtd === 0) return;
 
+          // Verifica se é elástico (coluna K, índice 10)
+          var ehElastico = (row[10] || "").toString().toUpperCase() === "SIM";
+
           // Inicializa totais da marca se não existir
           if (!totaisPorMarca[marca]) {
             totaisPorMarca[marca] = {
               reais: 0,
               pares: 0,
-              metros: 0
+              metros: 0,
+              elastico: 0
             };
           }
 
           // Acumula valores
           totaisPorMarca[marca].reais += valor;
 
-          if (unidade.includes("PAR")) {
+          if (ehElastico) {
+            totaisPorMarca[marca].elastico += qtd;
+          } else if (unidade.includes("PAR")) {
             totaisPorMarca[marca].pares += qtd;
           } else if (unidade.includes("M") || unidade.includes("METRO")) {
             totaisPorMarca[marca].metros += qtd;
@@ -2078,7 +2103,7 @@
 
       // Verifica se há dados
       if (!totaisPorMarca || Object.keys(totaisPorMarca).length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="marcas-empty">Nenhuma marca encontrada para este mês.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="marcas-empty">Nenhuma marca encontrada para este mês.</td></tr>';
         return;
       }
 
@@ -2110,6 +2135,7 @@
       var totalGeralReais = 0;
       var totalGeralPares = 0;
       var totalGeralMetros = 0;
+      var totalGeralElastico = 0;
 
       // Renderiza cada marca
       marcasArray.forEach(function(item) {
@@ -2118,10 +2144,15 @@
         totalGeralReais += item.dados.reais;
         totalGeralPares += item.dados.pares;
         totalGeralMetros += item.dados.metros;
+        totalGeralElastico += item.dados.elastico;
 
         // Calcula média de pares por dia útil
         var paresPorDia = diasUteis > 0 ? (item.dados.pares / diasUteis) : 0;
         var paresPorDiaFormatado = paresPorDia.toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+
+        var elasticoDisplay = item.dados.elastico > 0
+          ? '<span style="color:#e74c3c; font-weight:bold;">' + item.dados.elastico.toLocaleString('pt-BR') + '</span>'
+          : '0';
 
         tr.innerHTML = `
           <td class="marca-nome">${item.nome}</td>
@@ -2129,6 +2160,7 @@
           <td class="qtd-destaque">${item.dados.pares.toLocaleString('pt-BR')}</td>
           <td class="qtd-destaque" style="color: #8e44ad;">${paresPorDiaFormatado}</td>
           <td class="qtd-destaque">${item.dados.metros.toLocaleString('pt-BR')}</td>
+          <td class="qtd-destaque">${elasticoDisplay}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -2136,6 +2168,10 @@
       // Calcula média geral de pares por dia útil
       var mediaParesPorDia = diasUteis > 0 ? (totalGeralPares / diasUteis) : 0;
       var mediaParesPorDiaFormatado = mediaParesPorDia.toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+
+      var totalElasticoDisplay = totalGeralElastico > 0
+        ? '<span style="color:#e74c3c; font-weight:bold;">' + totalGeralElastico.toLocaleString('pt-BR') + '</span>'
+        : '0';
 
       // Adiciona linha de TOTAL
       var trTotal = document.createElement("tr");
@@ -2148,6 +2184,7 @@
         <td class="qtd-destaque">${totalGeralPares.toLocaleString('pt-BR')}</td>
         <td class="qtd-destaque" style="color: #8e44ad;">${mediaParesPorDiaFormatado}</td>
         <td class="qtd-destaque">${totalGeralMetros.toLocaleString('pt-BR')}</td>
+        <td class="qtd-destaque">${totalElasticoDisplay}</td>
       `;
       tbody.appendChild(trTotal);
 
@@ -2394,7 +2431,7 @@
       document.getElementById('modalHistorico').style.display = 'none';
     }
 
-    // Fecha o modal ao clicar fora dele
+    // Fecha os modais ao clicar fora deles
     window.onclick = function(event) {
       var modalFaturamento = document.getElementById('modalHistorico');
       if (event.target == modalFaturamento) {
@@ -2851,7 +2888,7 @@
           html += '<td class="observacao-cell">' + observacaoTexto + '</td>';
           html += '<td style="text-align:center;">';
           html += '<button class="btn-editar-historico" onclick="abrirModalEdicaoEntrada(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\', ' + item.valor + ', \'' + observacaoTexto.replace(/'/g, "\\'") + '\')">✏️ Editar</button>';
-          html += '<button class="btn-deletar-historico" onclick="deletarRegistroEntradaJS(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\')">🗑️ Deletar</button>';
+          html += '<button class="btn-deletar-historico" onclick="deletarRegistroEntrada(\'' + dataEscapada + '\', \'' + clienteEscapado + '\', \'' + marcaEscapada + '\')">🗑️ Deletar</button>';
           html += '</td>';
           html += '</tr>';
           totalDia += item.valor;
@@ -2948,7 +2985,7 @@
     }
 
     // Deleta um registro de entrada
-    function deletarRegistroEntradaJS(data, cliente, marca) {
+    function deletarRegistroEntrada(data, cliente, marca) {
       var confirmacao = confirm(
         "⚠️ TEM CERTEZA que deseja DELETAR este registro de entrada?\n\n" +
         "Data: " + data + "\n" +
@@ -3182,6 +3219,10 @@
         else if(textoUnd.includes("M")) classeBadge = "badge badge-metro";
         else classeBadge = "badge";
 
+        var elasticoHtml = (r[10] || "").toUpperCase() === "SIM"
+          ? '<span style="color:#e74c3c; font-weight:bold;">SIM</span>'
+          : '';
+
         tr.innerHTML = `
           <td>${r[0]}</td>
           <td>${r[1]}</td>
@@ -3192,6 +3233,7 @@
           <td>${r[6]}</td>
           <td><span class="${classeBadge}">${r[7]}</span></td>
           <td style="color:#2c3e50; font-weight:bold;">${r[8]}</td>
+          <td>${elasticoHtml}</td>
         `;
         tbody.appendChild(tr);
       });
