@@ -245,9 +245,9 @@ function getDadosPlanilha() {
       return [];
     }
 
-    // Pega até 1000 registros mais recentes para otimizar
-    var numLinhas = Math.min(1000, lastRow - 1);
-    var inicio = lastRow - numLinhas + 1;
+    // Pega todos os registros da planilha
+    var numLinhas = lastRow - 1;
+    var inicio = 2;
 
     var dados = sheet.getRange(inicio, 1, numLinhas, 10).getValues();
     Logger.log("✅ Recuperados " + dados.length + " registros");
