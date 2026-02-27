@@ -1240,6 +1240,14 @@ function getFaturamentoDia() {
     // CORREÇÃO CRÍTICA: Atualiza snapshot SOMENTE via trigger, nunca via webapp
     // Isso evita que chamadas manuais destruam a detecção de faturamento
     // O snapshot só deve ser atualizado DEPOIS que o faturamento foi processado
+
+    // Salva backup do snapshot anterior (permite restaurar em caso de erro no IMPORTRANGE)
+    if (snapshotAnterior) {
+      props.setProperty('SNAPSHOT_BACKUP', snapshotAnterior);
+      props.setProperty('SNAPSHOT_BACKUP_TIMESTAMP', timestampAnterior || obterTimestamp());
+      Logger.log("💾 Backup do snapshot anterior salvo (referência: " + (timestampAnterior || "sem timestamp") + ")");
+    }
+
     Logger.log("📸 Atualizando snapshot após detecção de faturamento...");
     props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
     props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
@@ -1249,6 +1257,12 @@ function getFaturamentoDia() {
     var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
                    ("0" + (dataAtual.getMonth() + 1)).slice(-2) + "/" +
                    dataAtual.getFullYear();
+
+    // Data de ontem: o trigger roda às 5h, mas o faturamento ocorreu no dia anterior
+    var ontem = new Date(dataAtual.getTime() - 86400000);
+    var diaFaturamento = ("0" + ontem.getDate()).slice(-2) + "/" +
+                         ("0" + (ontem.getMonth() + 1)).slice(-2) + "/" +
+                         ontem.getFullYear();
 
     var diaArmazenado = props.getProperty('FATURAMENTO_DATA');
     var faturamentoAcumulado = [];
@@ -1317,12 +1331,12 @@ function getFaturamentoDia() {
       // Atualiza resultado para retornar o acumulado
       resultado = novoAcumulado;
 
-      // Salva no histórico da planilha (apenas quando é novo faturamento no acumulado)
-      salvarFaturamentoNoHistorico(novoAcumulado, diaAtual);
+      // Salva no histórico da planilha (data do faturamento = ontem, pois trigger roda às 5h)
+      salvarFaturamentoNoHistorico(novoAcumulado, diaFaturamento);
 
       // NOVO: Registra faturamento na aba de controle visual (com OCs individuais)
       // Usa a lista 'faturado' que contém os OCs antes do agrupamento
-      registrarFaturamentoNaAbaControle(faturado, diaAtual + " " + obterTimestamp().split(" às ")[1]);
+      registrarFaturamentoNaAbaControle(faturado, diaFaturamento + " " + obterTimestamp().split(" às ")[1]);
     } else if (faturamentoAcumulado.length > 0) {
       // Não houve novo faturamento, mas há acumulado do dia
       Logger.log("ℹ️ Nenhum novo faturamento nesta verificação, mantendo acumulado do dia");
@@ -1351,8 +1365,8 @@ function getFaturamentoDia() {
           dataRegistro = dataRegistro.toString().trim();
         }
 
-        // Se é o dia de hoje
-        if (dataRegistro === diaAtual) {
+        // Se é o dia do faturamento (ontem, pois trigger roda às 5h)
+        if (dataRegistro === diaFaturamento) {
           dadosDodia.push({
             cliente: row[1].toString(),
             marca: row[2].toString(),
@@ -1880,15 +1894,17 @@ function corrigirFaturamento() {
     criarOuAtualizarAbaControle();
     Logger.log("✅ ControleFaturamento recriada com valores zerados");
 
-    // === PASSO 4: Limpar HistoricoFaturamento de hoje (registros automáticos) ===
-    Logger.log("📊 Passo 4: Limpando registros automáticos incorretos de hoje...");
+    // === PASSO 4: Limpar HistoricoFaturamento de ontem (registros automáticos incorretos) ===
+    // O trigger roda às 5h, então o faturamento incorreto foi gravado com data de ontem
+    Logger.log("📊 Passo 4: Limpando registros automáticos incorretos de ontem...");
     var sheetHistorico = doc.getSheetByName("HistoricoFaturamento");
 
     if (sheetHistorico && sheetHistorico.getLastRow() > 1) {
       var dataAtual = new Date();
-      var diaAtual = ("0" + dataAtual.getDate()).slice(-2) + "/" +
-                     ("0" + (dataAtual.getMonth() + 1)).slice(-2) + "/" +
-                     dataAtual.getFullYear();
+      var ontemCorrecao = new Date(dataAtual.getTime() - 86400000);
+      var diaFaturamento = ("0" + ontemCorrecao.getDate()).slice(-2) + "/" +
+                           ("0" + (ontemCorrecao.getMonth() + 1)).slice(-2) + "/" +
+                           ontemCorrecao.getFullYear();
 
       var lastRow = sheetHistorico.getLastRow();
       var removidos = 0;
@@ -1909,8 +1925,8 @@ function corrigirFaturamento() {
           dataLinha = dataLinha.toString().trim();
         }
 
-        // Remove apenas registros automáticos de hoje (sem observação)
-        if (dataLinha === diaAtual) {
+        // Remove apenas registros automáticos de ontem (sem observação)
+        if (dataLinha === diaFaturamento) {
           var obs = row[4] ? row[4].toString().trim() : "";
           if (!obs || obs === "") {
             sheetHistorico.deleteRow(i);
@@ -1919,7 +1935,7 @@ function corrigirFaturamento() {
         }
       }
 
-      Logger.log("✅ Removidos " + removidos + " registros automáticos de hoje do histórico");
+      Logger.log("✅ Removidos " + removidos + " registros automáticos de ontem (" + diaFaturamento + ") do histórico");
     } else {
       Logger.log("ℹ️ Aba HistoricoFaturamento vazia ou não existe");
     }
@@ -1937,7 +1953,7 @@ function corrigirFaturamento() {
 
     return {
       sucesso: true,
-      mensagem: "Correção concluída! ControleFaturamento recriada, snapshot resetado, e registros incorretos de hoje removidos."
+      mensagem: "Correção concluída! ControleFaturamento recriada, snapshot resetado, e registros incorretos de ontem removidos."
     };
 
   } catch (erro) {
@@ -4090,5 +4106,244 @@ function deletarRegistroEntrada(data, cliente, marca) {
       sucesso: false,
       mensagem: "Erro ao deletar: " + erro.message
     };
+  }
+}
+
+// ========================================
+// MENU DA PLANILHA
+// ========================================
+
+/**
+ * Cria o menu customizado quando a planilha é aberta
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('⚙️ Relatório Bahia')
+    .addItem('📧 Enviar Relatório por Email', 'enviarRelatorioEmail')
+    .addSeparator()
+    .addItem('📋 Migrar Entradas para Histórico', 'migrarEntradasParaHistorico')
+    .addItem('🔍 Executar Verificação de Faturamento', 'executarVerificacaoFaturamento')
+    .addSeparator()
+    .addItem('🔧 Corrigir Faturamento (Geral)', 'corrigirFaturamento')
+    .addItem('↩️ Restaurar Snapshot Anterior (IMPORTRANGE)', 'corrigirFaturamentoComBackup')
+    .addToUi();
+}
+
+// ========================================
+// CORREÇÃO COM BACKUP DE SNAPSHOT
+// ========================================
+
+/**
+ * FUNÇÃO DE REPARO AVANÇADO: Restaura o snapshot da penúltima execução
+ *
+ * USE QUANDO: O trigger das 5h rodou com IMPORTRANGE em branco ou parcial,
+ * gerando um faturamento incorreto (valor absurdo ou total zerado).
+ *
+ * Como funciona:
+ * - Antes de cada atualização de snapshot, o sistema salva o snapshot anterior como backup
+ * - Esta função restaura esse backup como o snapshot ativo
+ * - Remove os registros incorretos de ontem do HistoricoFaturamento
+ * - Reseta o acumulado para que a próxima verificação parta do estado correto
+ */
+function corrigirFaturamentoComBackup() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var props = PropertiesService.getScriptProperties();
+
+    Logger.log("↩️ === INICIANDO RESTAURAÇÃO DE SNAPSHOT ANTERIOR ===");
+
+    // === VERIFICA SE HÁ BACKUP DISPONÍVEL ===
+    var snapshotBackup = props.getProperty('SNAPSHOT_BACKUP');
+    var backupTimestamp = props.getProperty('SNAPSHOT_BACKUP_TIMESTAMP');
+
+    if (!snapshotBackup) {
+      ui.alert(
+        '❌ Sem backup disponível',
+        'Nenhum backup de snapshot foi encontrado.\n\n' +
+        'O backup é criado automaticamente a cada vez que o trigger detecta faturamento. ' +
+        'Se o sistema nunca detectou faturamento ou se o backup foi removido, ' +
+        'use a opção "Corrigir Faturamento (Geral)" no menu.',
+        ui.ButtonSet.OK
+      );
+      return { sucesso: false, mensagem: "Nenhum backup disponível." };
+    }
+
+    // === MOSTRA INFORMAÇÕES DO BACKUP E PEDE CONFIRMAÇÃO ===
+    var mapaBackup;
+    try {
+      mapaBackup = JSON.parse(snapshotBackup);
+    } catch (e) {
+      ui.alert('❌ Backup corrompido', 'O backup encontrado está corrompido e não pode ser restaurado.', ui.ButtonSet.OK);
+      return { sucesso: false, mensagem: "Backup corrompido." };
+    }
+
+    var totalOCsBackup = Object.keys(mapaBackup).length;
+    var snapshotAtual = props.getProperty('SNAPSHOT_DADOS1');
+    var totalOCsAtual = snapshotAtual ? Object.keys(JSON.parse(snapshotAtual)).length : 0;
+
+    var dataAtual = new Date();
+    var ontem = new Date(dataAtual.getTime() - 86400000);
+    var diaFaturamento = ("0" + ontem.getDate()).slice(-2) + "/" +
+                         ("0" + (ontem.getMonth() + 1)).slice(-2) + "/" +
+                         ontem.getFullYear();
+
+    var resposta = ui.alert(
+      '↩️ Restaurar Snapshot Anterior?',
+      'Esta operação irá:\n\n' +
+      '1. Restaurar o snapshot de: ' + (backupTimestamp || 'data desconhecida') + '\n' +
+      '   OCs no backup: ' + totalOCsBackup + ' | OCs no snapshot atual: ' + totalOCsAtual + '\n\n' +
+      '2. Remover registros automáticos incorretos de ontem (' + diaFaturamento + ') do HistoricoFaturamento\n\n' +
+      '3. Resetar acumulado para que a próxima verificação releia corretamente\n\n' +
+      'Confirmar restauração?',
+      ui.ButtonSet.YES_NO
+    );
+
+    if (resposta !== ui.Button.YES) {
+      Logger.log("↩️ Restauração cancelada pelo usuário.");
+      return { sucesso: false, mensagem: "Operação cancelada." };
+    }
+
+    // === PASSO 1: Restaura backup como snapshot ativo ===
+    Logger.log("📸 Passo 1: Restaurando backup como snapshot ativo...");
+    props.setProperty('SNAPSHOT_DADOS1', snapshotBackup);
+    props.setProperty('SNAPSHOT_TIMESTAMP', backupTimestamp || obterTimestamp());
+    // Limpa o backup após restauração para evitar restauração dupla
+    props.deleteProperty('SNAPSHOT_BACKUP');
+    props.deleteProperty('SNAPSHOT_BACKUP_TIMESTAMP');
+    Logger.log("✅ Snapshot restaurado com " + totalOCsBackup + " OCs");
+
+    // === PASSO 2: Reseta acumulado ===
+    Logger.log("🔄 Passo 2: Resetando acumulado de faturamento...");
+    props.deleteProperty('ULTIMO_FATURAMENTO');
+    props.deleteProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
+    props.deleteProperty('FATURAMENTO_DATA');
+    Logger.log("✅ Acumulado resetado");
+
+    // === PASSO 3: Remove registros automáticos incorretos de ontem ===
+    Logger.log("📊 Passo 3: Removendo registros automáticos de ontem (" + diaFaturamento + ")...");
+    var doc = SpreadsheetApp.getActiveSpreadsheet();
+    var sheetHistorico = doc.getSheetByName("HistoricoFaturamento");
+    var removidos = 0;
+
+    if (sheetHistorico && sheetHistorico.getLastRow() > 1) {
+      var lastRow = sheetHistorico.getLastRow();
+
+      for (var i = lastRow; i >= 2; i--) {
+        var row = sheetHistorico.getRange(i, 1, 1, 6).getValues()[0];
+
+        var dataLinha = row[0];
+        if (dataLinha instanceof Date) {
+          var d = dataLinha;
+          dataLinha = ("0" + d.getDate()).slice(-2) + "/" +
+                      ("0" + (d.getMonth() + 1)).slice(-2) + "/" +
+                      d.getFullYear();
+        } else {
+          dataLinha = dataLinha.toString().trim();
+        }
+
+        // Remove apenas registros sem observação (= automáticos)
+        if (dataLinha === diaFaturamento) {
+          var obs = row[4] ? row[4].toString().trim() : "";
+          if (!obs || obs === "") {
+            sheetHistorico.deleteRow(i);
+            removidos++;
+          }
+        }
+      }
+    }
+
+    Logger.log("✅ Removidos " + removidos + " registros automáticos de ontem");
+
+    // === PASSO 4: Atualiza ControleFaturamento para refletir estado do backup ===
+    Logger.log("📋 Passo 4: Sincronizando ControleFaturamento com estado do backup...");
+    var sheetControle = doc.getSheetByName("ControleFaturamento");
+    if (sheetControle) {
+      try {
+        sincronizarOCsNaAbaControle(sheetControle);
+        Logger.log("✅ ControleFaturamento sincronizada");
+      } catch (errSinc) {
+        Logger.log("⚠️ Não foi possível sincronizar ControleFaturamento: " + errSinc.toString());
+      }
+    }
+
+    Logger.log("↩️ === RESTAURAÇÃO CONCLUÍDA COM SUCESSO ===");
+    Logger.log("ℹ️ O sistema usará o snapshot restaurado como base na próxima verificação");
+
+    ui.alert(
+      '✅ Restauração Concluída',
+      'Snapshot anterior restaurado com sucesso!\n\n' +
+      '• OCs no snapshot restaurado: ' + totalOCsBackup + '\n' +
+      '• Registros incorretos removidos do histórico: ' + removidos + '\n\n' +
+      'Na próxima execução do trigger (5h), o sistema fará a comparação a partir deste ponto.',
+      ui.ButtonSet.OK
+    );
+
+    return {
+      sucesso: true,
+      mensagem: "Snapshot restaurado. " + removidos + " registros incorretos removidos."
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro durante restauração: " + erro.toString());
+    try {
+      SpreadsheetApp.getUi().alert('❌ Erro', 'Erro durante a restauração: ' + erro.toString(), SpreadsheetApp.getUi().ButtonSet.OK);
+    } catch (e) {}
+    return {
+      sucesso: false,
+      mensagem: "Erro: " + erro.toString()
+    };
+  }
+}
+
+// ========================================
+// CONFIGURAÇÃO DE TRIGGER (5H DA MANHÃ)
+// ========================================
+
+/**
+ * Configura o trigger para rodar às 5h da manhã (após atualização noturna do IMPORTRANGE)
+ *
+ * POR QUE 5H?
+ * - A atualização dos dados ocorre entre 17h e 19h do dia anterior
+ * - O IMPORTRANGE pode levar alguns minutos para sincronizar
+ * - Rodar às 5h garante 10+ horas de buffer após a atualização
+ * - A data do faturamento é gravada como ONTEM (dia anterior à execução)
+ *
+ * IMPORTANTE: Execute esta função UMA VEZ pelo menu ou diretamente no editor
+ * para reconfigurar o trigger existente.
+ */
+function setupTrigger5h() {
+  // Remove triggers antigos de executarVerificacaoFaturamento
+  var triggers = ScriptApp.getProjectTriggers();
+  var removidos = 0;
+  triggers.forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'executarVerificacaoFaturamento') {
+      ScriptApp.deleteTrigger(trigger);
+      removidos++;
+    }
+  });
+
+  Logger.log("🗑️ Removidos " + removidos + " trigger(s) antigo(s)");
+
+  // Cria trigger para executar diariamente às 5h da manhã
+  ScriptApp.newTrigger('executarVerificacaoFaturamento')
+    .timeBased()
+    .atHour(5)
+    .everyDays(1)
+    .create();
+
+  Logger.log("✅ Trigger configurado: executarVerificacaoFaturamento às 5h diariamente");
+  Logger.log("⏰ O faturamento detectado será gravado com a data do DIA ANTERIOR (ontem)");
+  Logger.log("ℹ️ Isso garante que o faturamento de ontem seja registrado com a data correta");
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      '✅ Trigger Configurado',
+      'Trigger configurado para rodar às 5h da manhã diariamente.\n\n' +
+      'O faturamento detectado será gravado com a data do dia anterior (ontem), ' +
+      'garantindo que o registro corresponda ao dia em que o faturamento realmente ocorreu.',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  } catch (e) {
+    // Chamado fora do contexto de UI (editor), sem alerta
   }
 }
