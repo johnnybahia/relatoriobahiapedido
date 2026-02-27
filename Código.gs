@@ -4126,6 +4126,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🔧 Corrigir Faturamento (Geral)', 'corrigirFaturamento')
     .addItem('↩️ Restaurar Snapshot Anterior (IMPORTRANGE)', 'corrigirFaturamentoComBackup')
+    .addItem('🔁 Recalcular Faturamento Correto (IMPORTRANGE já carregado)', 'recalcularFaturamentoCorreto')
     .addToUi();
 }
 
@@ -4287,6 +4288,294 @@ function corrigirFaturamentoComBackup() {
     Logger.log("❌ Erro durante restauração: " + erro.toString());
     try {
       SpreadsheetApp.getUi().alert('❌ Erro', 'Erro durante a restauração: ' + erro.toString(), SpreadsheetApp.getUi().ButtonSet.OK);
+    } catch (e) {}
+    return {
+      sucesso: false,
+      mensagem: "Erro: " + erro.toString()
+    };
+  }
+}
+
+// ========================================
+// RECALCULAR FATURAMENTO COM IMPORTRANGE CORRETO
+// ========================================
+
+/**
+ * FUNÇÃO DE REPARO INTELIGENTE: Recalcula o faturamento correto usando o snapshot
+ * de antes das 5h (backup) comparado com o estado ATUAL do dados1 (IMPORTRANGE já corrigido).
+ *
+ * USE QUANDO:
+ *   1. O trigger das 5h rodou com IMPORTRANGE em branco → gerou faturamento errado
+ *   2. O IMPORTRANGE já está corretamente carregado agora
+ *   3. Você quer corrigir o histórico com os valores REAIS de faturamento
+ *
+ * O que esta função faz:
+ *   1. Usa o SNAPSHOT_BACKUP (estado correto de antes das 5h) como base
+ *   2. Lê o dados1 AGORA (IMPORTRANGE carregado corretamente)
+ *   3. Valida que o dados1 tem dados reais (proteção se ainda estiver em branco)
+ *   4. Compara BACKUP vs AGORA → calcula o faturamento REAL
+ *   5. Remove registros automáticos errados do HistoricoFaturamento
+ *   6. Grava os registros CORRETOS no HistoricoFaturamento (se houver faturamento real)
+ *   7. Reseta e corrige o ControleFaturamento com os dados corretos
+ *   8. Salva o novo snapshot com o estado atual correto
+ *   9. Consome o backup (evita uso duplo)
+ */
+function recalcularFaturamentoCorreto() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var props = PropertiesService.getScriptProperties();
+
+    Logger.log("🔁 === RECALCULANDO FATURAMENTO CORRETO ===");
+
+    // === PASSO 1: Verifica se há backup disponível ===
+    var snapshotBackup = props.getProperty('SNAPSHOT_BACKUP');
+    var backupTimestamp = props.getProperty('SNAPSHOT_BACKUP_TIMESTAMP');
+
+    if (!snapshotBackup) {
+      ui.alert(
+        '❌ Sem backup disponível',
+        'Nenhum backup de snapshot foi encontrado.\n\n' +
+        'O backup é criado automaticamente quando o trigger detecta faturamento.\n' +
+        'Se o backup não existe, use "Corrigir Faturamento (Geral)" no menu.',
+        ui.ButtonSet.OK
+      );
+      return { sucesso: false, mensagem: "Nenhum backup disponível." };
+    }
+
+    // Parseia o backup
+    var mapaBackup;
+    try {
+      mapaBackup = JSON.parse(snapshotBackup);
+    } catch (e) {
+      ui.alert('❌ Backup corrompido', 'O backup encontrado está corrompido e não pode ser usado.', ui.ButtonSet.OK);
+      return { sucesso: false, mensagem: "Backup corrompido." };
+    }
+
+    var totalOCsBackup = Object.keys(mapaBackup).length;
+
+    // === PASSO 2: Lê o estado ATUAL do dados1 (IMPORTRANGE deve estar carregado) ===
+    Logger.log("📋 Passo 2: Lendo dados1 agora (IMPORTRANGE deve estar carregado)...");
+    var mapaAtual = agruparDados1PorOC();
+    var totalOCsAtual = Object.keys(mapaAtual).length;
+
+    // === PASSO 3: Valida que o dados1 tem dados reais ===
+    if (totalOCsAtual === 0) {
+      ui.alert(
+        '⚠️ dados1 ainda está vazio!',
+        'O IMPORTRANGE ainda não carregou os dados corretamente.\n\n' +
+        'Aguarde o IMPORTRANGE terminar de carregar e tente novamente.\n\n' +
+        'Você pode verificar a aba Dados1 antes de executar.',
+        ui.ButtonSet.OK
+      );
+      return { sucesso: false, mensagem: "Dados1 vazio. IMPORTRANGE ainda não carregou." };
+    }
+
+    if (totalOCsBackup > 5 && totalOCsAtual < totalOCsBackup * 0.2) {
+      var confirmaAnyway = ui.alert(
+        '⚠️ Diferença grande entre backup e atual',
+        'O backup tem ' + totalOCsBackup + ' OCs, mas o dados1 atual tem apenas ' + totalOCsAtual + ' OCs.\n\n' +
+        'Isso pode indicar que o IMPORTRANGE ainda não carregou completamente.\n\n' +
+        'Deseja continuar mesmo assim?',
+        ui.ButtonSet.YES_NO
+      );
+      if (confirmaAnyway !== ui.Button.YES) {
+        return { sucesso: false, mensagem: "Operação cancelada pelo usuário." };
+      }
+    }
+
+    // === Determina a data de faturamento com base no timestamp do backup ===
+    var diaFaturamento = null;
+
+    if (backupTimestamp) {
+      try {
+        // Formato: "DD/MM/YYYY às HH:MM"
+        var partes = backupTimestamp.split(" às ");
+        if (partes.length > 0) {
+          var dataPartes = partes[0].split("/");
+          if (dataPartes.length === 3) {
+            var dBackup = new Date(parseInt(dataPartes[2]), parseInt(dataPartes[1]) - 1, parseInt(dataPartes[0]));
+            var ontemBackup = new Date(dBackup.getTime() - 86400000);
+            diaFaturamento = ("0" + ontemBackup.getDate()).slice(-2) + "/" +
+                             ("0" + (ontemBackup.getMonth() + 1)).slice(-2) + "/" +
+                             ontemBackup.getFullYear();
+          }
+        }
+      } catch (eParse) {
+        Logger.log("⚠️ Não conseguiu parsear timestamp do backup: " + eParse.toString());
+      }
+    }
+
+    // Fallback: usa ontem em relação a agora
+    if (!diaFaturamento) {
+      var ontemFallback = new Date(new Date().getTime() - 86400000);
+      diaFaturamento = ("0" + ontemFallback.getDate()).slice(-2) + "/" +
+                       ("0" + (ontemFallback.getMonth() + 1)).slice(-2) + "/" +
+                       ontemFallback.getFullYear();
+    }
+
+    // === Mostra resumo e pede confirmação ===
+    var resposta = ui.alert(
+      '🔁 Recalcular Faturamento Correto?',
+      'Esta operação irá:\n\n' +
+      '1. Usar o snapshot de antes das 5h como base\n' +
+      '   (Backup de: ' + (backupTimestamp || 'data desconhecida') + ' | ' + totalOCsBackup + ' OCs)\n\n' +
+      '2. Comparar com o dados1 atual (' + totalOCsAtual + ' OCs) → calcular faturamento REAL\n\n' +
+      '3. Remover registros automáticos errados de ' + diaFaturamento + ' do HistoricoFaturamento\n\n' +
+      '4. Gravar os registros CORRETOS no HistoricoFaturamento\n\n' +
+      '5. Corrigir o ControleFaturamento com os valores reais\n\n' +
+      '6. Salvar o novo snapshot com o estado atual do dados1\n\n' +
+      '⚠️ Esta ação consome o backup e não pode ser desfeita automaticamente.\n\n' +
+      'Confirmar?',
+      ui.ButtonSet.YES_NO
+    );
+
+    if (resposta !== ui.Button.YES) {
+      Logger.log("🔁 Operação cancelada pelo usuário.");
+      return { sucesso: false, mensagem: "Operação cancelada." };
+    }
+
+    // === PASSO 4: Calcula o faturamento REAL (backup vs atual) ===
+    Logger.log("📊 Passo 4: Calculando faturamento real (backup vs dados1 atual)...");
+    var mapaOCMarca = criarMapaOCMarca();
+    var faturadoDetalhado = []; // com OC individual (para ControleFaturamento)
+
+    Object.keys(mapaBackup).forEach(function(oc) {
+      var itemAnterior = mapaBackup[oc];
+      var itemAtual = mapaAtual[oc];
+      var valorFaturado = 0;
+
+      if (!itemAtual) {
+        // OC sumiu completamente = faturou tudo
+        valorFaturado = itemAnterior.valor;
+      } else if (itemAtual.valor < itemAnterior.valor) {
+        // Valor diminuiu = faturou a diferença
+        valorFaturado = itemAnterior.valor - itemAtual.valor;
+      }
+
+      if (valorFaturado > 0) {
+        var marca = buscarMarcaNoMapa(oc, mapaOCMarca);
+        faturadoDetalhado.push({
+          cliente: itemAnterior.cliente,
+          valor: valorFaturado,
+          marca: marca,
+          oc: oc
+        });
+      }
+    });
+
+    // Agrupa por cliente+marca para o HistoricoFaturamento
+    var faturadoAgrupado = {};
+    faturadoDetalhado.forEach(function(item) {
+      var chave = item.cliente + "|" + item.marca;
+      if (!faturadoAgrupado[chave]) {
+        faturadoAgrupado[chave] = { cliente: item.cliente, marca: item.marca, valor: 0 };
+      }
+      faturadoAgrupado[chave].valor += item.valor;
+    });
+
+    var resultadoCorreto = Object.keys(faturadoAgrupado).map(function(chave) {
+      return faturadoAgrupado[chave];
+    });
+    resultadoCorreto.sort(function(a, b) { return b.valor - a.valor; });
+
+    Logger.log("💰 Faturamento real calculado: " + faturadoDetalhado.length + " OCs / " + resultadoCorreto.length + " cliente+marca");
+
+    // === PASSO 5: Remove registros automáticos errados do HistoricoFaturamento ===
+    Logger.log("🗑️ Passo 5: Removendo registros automáticos errados de " + diaFaturamento + "...");
+    var doc = SpreadsheetApp.getActiveSpreadsheet();
+    var sheetHistorico = doc.getSheetByName("HistoricoFaturamento");
+    var removidos = 0;
+
+    if (sheetHistorico && sheetHistorico.getLastRow() > 1) {
+      var lastRow = sheetHistorico.getLastRow();
+      for (var i = lastRow; i >= 2; i--) {
+        var row = sheetHistorico.getRange(i, 1, 1, 6).getValues()[0];
+        var dataLinha = row[0];
+        if (dataLinha instanceof Date) {
+          var d = dataLinha;
+          dataLinha = ("0" + d.getDate()).slice(-2) + "/" +
+                      ("0" + (d.getMonth() + 1)).slice(-2) + "/" +
+                      d.getFullYear();
+        } else {
+          dataLinha = dataLinha.toString().trim();
+        }
+        if (dataLinha === diaFaturamento) {
+          var obs = row[4] ? row[4].toString().trim() : "";
+          if (!obs || obs === "") {
+            sheetHistorico.deleteRow(i);
+            removidos++;
+          }
+        }
+      }
+    }
+    Logger.log("✅ Removidos " + removidos + " registros automáticos errados");
+
+    // === PASSO 6: Grava os registros CORRETOS no histórico (se houver faturamento real) ===
+    if (resultadoCorreto.length > 0) {
+      Logger.log("✅ Passo 6: Gravando " + resultadoCorreto.length + " registros corretos no histórico...");
+      salvarFaturamentoNoHistorico(resultadoCorreto, diaFaturamento);
+    } else {
+      Logger.log("ℹ️ Passo 6: Nenhum faturamento real detectado para " + diaFaturamento + " — histórico limpo (sem registros incorretos)");
+    }
+
+    // === PASSO 7: Reseta e corrige o ControleFaturamento ===
+    Logger.log("📋 Passo 7: Recriando ControleFaturamento com valores corretos...");
+    var sheetControle = doc.getSheetByName("ControleFaturamento");
+    if (sheetControle) {
+      doc.deleteSheet(sheetControle);
+    }
+    criarOuAtualizarAbaControle();
+
+    if (faturadoDetalhado.length > 0) {
+      var dataStr = diaFaturamento + " " + obterTimestamp().split(" às ")[1];
+      registrarFaturamentoNaAbaControle(faturadoDetalhado, dataStr);
+      Logger.log("✅ ControleFaturamento atualizado com faturamento correto");
+    } else {
+      Logger.log("ℹ️ ControleFaturamento recriado zerado (nenhum faturamento real detectado)");
+    }
+
+    // === PASSO 8: Salva novo snapshot com o estado ATUAL correto ===
+    Logger.log("📸 Passo 8: Salvando novo snapshot com estado atual do dados1...");
+    props.setProperty('SNAPSHOT_DADOS1', JSON.stringify(mapaAtual));
+    props.setProperty('SNAPSHOT_TIMESTAMP', obterTimestamp());
+    Logger.log("✅ Novo snapshot salvo com " + totalOCsAtual + " OCs");
+
+    // === PASSO 9: Limpa o backup (consumido) e reseta acumulado ===
+    props.deleteProperty('SNAPSHOT_BACKUP');
+    props.deleteProperty('SNAPSHOT_BACKUP_TIMESTAMP');
+    props.deleteProperty('ULTIMO_FATURAMENTO');
+    props.deleteProperty('ULTIMO_FATURAMENTO_TIMESTAMP');
+    props.deleteProperty('FATURAMENTO_DATA');
+    Logger.log("✅ Backup e acumulado limpos");
+
+    Logger.log("🔁 === RECALCULO CONCLUÍDO COM SUCESSO ===");
+
+    ui.alert(
+      '✅ Faturamento Recalculado',
+      'Correção concluída com sucesso!\n\n' +
+      '• Data de faturamento corrigida: ' + diaFaturamento + '\n' +
+      '• OCs no backup (antes das 5h): ' + totalOCsBackup + '\n' +
+      '• OCs no dados1 atual: ' + totalOCsAtual + '\n' +
+      '• Registros errados removidos do histórico: ' + removidos + '\n' +
+      '• Registros corretos gravados: ' + resultadoCorreto.length + '\n\n' +
+      (resultadoCorreto.length > 0
+        ? 'Faturamento real detectado:\n' + resultadoCorreto.slice(0, 5).map(function(i) {
+            return '  • ' + i.cliente + ' (' + i.marca + '): R$ ' + i.valor.toFixed(2);
+          }).join('\n') + (resultadoCorreto.length > 5 ? '\n  ...' : '')
+        : 'Nenhum faturamento real detectado para este dia.') + '\n\n' +
+      'O sistema está sincronizado com a realidade atual.',
+      ui.ButtonSet.OK
+    );
+
+    return {
+      sucesso: true,
+      mensagem: "Recalculo concluído. " + resultadoCorreto.length + " registros corretos. " + removidos + " removidos."
+    };
+
+  } catch (erro) {
+    Logger.log("❌ Erro durante recalculo: " + erro.toString());
+    try {
+      SpreadsheetApp.getUi().alert('❌ Erro', 'Erro durante o recalculo: ' + erro.toString(), SpreadsheetApp.getUi().ButtonSet.OK);
     } catch (e) {}
     return {
       sucesso: false,
